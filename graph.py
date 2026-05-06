@@ -1,4 +1,5 @@
 from langgraph.graph import StateGraph, END
+from data import get_financials
 from typing import TypedDict
 
 
@@ -8,19 +9,20 @@ class AnalysisState(TypedDict):
 
 
 def load_data(state: AnalysisState) -> AnalysisState:
-    mock = {
-        "company": "삼성전자",
-        "매출액": 300_000_000_000_000,
-        "영업이익": 32_000_000_000_000,
-        "순이익": 34_000_000_000_000,
-    }
-    return {"data": mock, "result": ""}
+    financials = get_financials("삼성전자")
+    return {"data": financials, "result": ""}
 
 
 def process_data(state: AnalysisState) -> AnalysisState:
     d = state["data"]
-    result = f"분석 준비 완료: 매출액 {d['매출액']:,}원, 영업이익 {d['영업이익']:,}원"
-    print(result)
+    if d:
+        latest_year = max(d.keys())
+        latest_data = d[latest_year]
+        result = f"분석 준비 완료: {latest_year}년 매출액 {latest_data['매출액']:,}억원, 영업이익 {latest_data['영업이익']:,}억원"
+        print(result)
+    else:
+        result = "데이터를 찾을 수 없습니다."
+        print(result)
     return {"data": d, "result": result}
 
 
