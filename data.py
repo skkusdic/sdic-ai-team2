@@ -1,14 +1,70 @@
+import os
 import sqlite3
+
+import dart_fss as dart
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DB_PATH = "financials.db"
 
-MOCK_DATA = {
-    "삼성전자": {
-        2022: {"매출액": 302_231, "영업이익": 43_376, "순이익": 55_654},
-        2023: {"매출액": 258_935, "영업이익":  6_567, "순이익": 15_487},
-        2024: {"매출액": 300_870, "영업이익": 32_726, "순이익": 34_082},
-    }
+dart.set_api_key(os.environ["DART_API_KEY"])
+
+_LABEL_MAP = {
+    "매출액": "매출액",
+    "수익(매출액)": "매출액",
+    "영업이익": "영업이익",
+    "영업이익(손실)": "영업이익",
+    "당기순이익": "순이익",
+    "당기순이익(손실)": "순이익",
 }
+
+_TARGET_KEYS = {"매출액", "영업이익", "순이익"}
+
+
+def _parse_fs(is_df) -> dict:
+    """MultiIndex DataFrame에서 연도별 {매출액, 영업이익, 순이익} 추출 (단위: 억원)."""
+    # 연도 컬럼: ('20220101-20221231', ...) 형태에서 시작 연도 추출
+    year_cols = {
+        col: int(col[0][:4])
+        for col in is_df.columns
+        if isinstance(col, tuple) and len(col[0]) == 17 and col[0][8] == "-"
+    }
+
+    top_level = [c for c in is_df.columns.get_level_values(0) if "손익계산서" in c or "Income" in c]
+    label_col = (top_level[0], "label_ko") if top_level else None
+    if label_col is None or label_col not in is_df.columns:
+        return {}
+
+    result: dict[int, dict] = {}
+    for _, row in is_df.iterrows():
+        label = str(row[label_col]).strip()
+        mapped = _LABEL_MAP.get(label)
+        if not mapped:
+            continue
+        for col, year in year_cols.items():
+            if year not in range(2022, 2026):
+                continue
+            result.setdefault(year, {})
+            if mapped not in result[year]:
+                try:
+                    result[year][mapped] = int(float(str(row[col]).replace(",", ""))) // 100_000_000
+                except (ValueError, TypeError):
+                    result[year][mapped] = 0
+
+    return {yr: m for yr, m in result.items() if m.keys() >= _TARGET_KEYS}
+
+
+def _fetch_from_dart(company_name: str) -> dict:
+    corp_list = dart.get_corp_list()
+    corps = corp_list.find_by_corp_name(company_name, exactly=True)
+    if not corps:
+        return {}
+    fs = corps[0].extract_fs(bgn_de="20220101")
+    is_df = fs._statements.get("is")
+    if is_df is None or is_df.empty:
+        return {}
+    return _parse_fs(is_df)
 
 
 def _save_to_db(company_name: str, data: dict) -> None:
@@ -16,11 +72,11 @@ def _save_to_db(company_name: str, data: dict) -> None:
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS financials (
-            company TEXT,
-            year    INTEGER,
-            매출액  INTEGER,
+            company  TEXT,
+            year     INTEGER,
+            매출액   INTEGER,
             영업이익 INTEGER,
-            순이익  INTEGER,
+            순이익   INTEGER,
             PRIMARY KEY (company, year)
         )
     """)
@@ -34,8 +90,7 @@ def _save_to_db(company_name: str, data: dict) -> None:
 
 
 def get_financials(company_name: str) -> dict:
-    # TODO: dart-fss 연동
-    data = MOCK_DATA.get(company_name, {})
+    data = _fetch_from_dart(company_name)
     if data:
         _save_to_db(company_name, data)
     return data
@@ -43,12 +98,15 @@ def get_financials(company_name: str) -> dict:
 
 if __name__ == "__main__":
     data = get_financials("삼성전자")
-    print(f"{'연도':<6} {'매출액':>12} {'영업이익':>12} {'순이익':>12}  (단위: 억원)")
-    print("-" * 50)
-    for year, metrics in sorted(data.items()):
-        print(
-            f"{year:<6} "
-            f"{metrics['매출액']:>12,} "
-            f"{metrics['영업이익']:>12,} "
-            f"{metrics['순이익']:>12,}"
-        )
+    if not data:
+        print("데이터를 가져오지 못했습니다.")
+    else:
+        print(f"{'연도':<6} {'매출액':>12} {'영업이익':>12} {'순이익':>12}  (단위: 억원)")
+        print("-" * 50)
+        for year, metrics in sorted(data.items()):
+            print(
+                f"{year:<6} "
+                f"{metrics['매출액']:>12,} "
+                f"{metrics['영업이익']:>12,} "
+                f"{metrics['순이익']:>12,}"
+            )
