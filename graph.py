@@ -21,7 +21,7 @@ def process_data(state: AnalysisState) -> AnalysisState:
     if d:
         latest_year = max(d.keys())
         latest_data = d[latest_year]
-        result = f"분석 준비 완료: {latest_year}년 매출액 {latest_data['매출액']:,}억원, 영업이익 {latest_data['영업이익']:,}억원"
+        result = f"{latest_year}년 기준 매출액 {latest_data['매출액']:,}억원, 영업이익 {latest_data['영업이익']:,}억원, 순이익 {latest_data['순이익']:,}억원"
     else:
         result = "데이터를 찾을 수 없습니다."
     return {"company": state["company"], "data": d, "result": result, "analysis": ""}

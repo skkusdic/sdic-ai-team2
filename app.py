@@ -40,6 +40,8 @@ if st.button("분석 시작", type="primary"):
             st.subheader(f"{company} 재무 현황")
             st.dataframe(df.set_index("연도"), use_container_width=True)
 
+            st.caption(state["result"])
+
             st.subheader("Claude AI 분석")
             st.markdown(state["analysis"])
 
