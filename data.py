@@ -10,6 +10,8 @@ DB_PATH = "financials.db"
 
 dart.set_api_key(os.environ["DART_API_KEY"])
 
+_corp_list_cache = None
+
 _LABEL_MAP = {
     "매출액": "매출액",
     "수익(매출액)": "매출액",
@@ -71,8 +73,10 @@ def _find_corp(corp_list, company_name: str):
 
 
 def _fetch_from_dart(company_name: str) -> dict:
-    corp_list = dart.get_corp_list()
-    corp = _find_corp(corp_list, company_name)
+    global _corp_list_cache
+    if _corp_list_cache is None:
+        _corp_list_cache = dart.get_corp_list()
+    corp = _find_corp(_corp_list_cache, company_name)
     if corp is None:
         return {}
     try:
