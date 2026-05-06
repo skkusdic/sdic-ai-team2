@@ -43,7 +43,7 @@ def _parse_fs(is_df) -> dict:
         if not mapped:
             continue
         for col, year in year_cols.items():
-            if year not in range(2022, 2026):
+            if year not in range(2021, 2026):
                 continue
             result.setdefault(year, {})
             if mapped not in result[year]:
@@ -55,12 +55,30 @@ def _parse_fs(is_df) -> dict:
     return {yr: m for yr, m in result.items() if m.keys() >= _TARGET_KEYS}
 
 
+def _find_corp(corp_list, company_name: str):
+    # 정확히 일치하는 기업 우선, 없으면 이름 포함 검색 후 가장 유사한 것 선택
+    exact = corp_list.find_by_corp_name(company_name, exactly=True)
+    if exact:
+        return exact[0]
+    fuzzy = corp_list.find_by_corp_name(company_name, exactly=False)
+    if not fuzzy:
+        return None
+    # 이름이 정확히 같은 것 우선, 없으면 첫 번째
+    for c in fuzzy:
+        if c.corp_name == company_name:
+            return c
+    return fuzzy[0]
+
+
 def _fetch_from_dart(company_name: str) -> dict:
     corp_list = dart.get_corp_list()
-    corps = corp_list.find_by_corp_name(company_name, exactly=True)
-    if not corps:
+    corp = _find_corp(corp_list, company_name)
+    if corp is None:
         return {}
-    fs = corps[0].extract_fs(bgn_de="20220101")
+    try:
+        fs = corp.extract_fs(bgn_de="20210101")
+    except Exception:
+        return {}
     is_df = fs._statements.get("is")
     if is_df is None or is_df.empty:
         return {}
