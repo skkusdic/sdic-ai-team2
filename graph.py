@@ -1,68 +1,150 @@
+import sys
 from langgraph.graph import StateGraph, END
+from typing import TypedDict, Literal
 from data import get_financials
 from claude_client import ask
-from typing import TypedDict
+from agents.analysis_agent import analyze as analyze_financials
 
 
 class AnalysisState(TypedDict):
+    request: str
     company: str
-    data: dict
-    result: str
+    next_agent: str
+    financials: dict
     analysis: str
+    result: str
+    pdf_path: str
 
 
-def load_data(state: AnalysisState) -> AnalysisState:
+def supervisor_node(state: AnalysisState) -> AnalysisState:
+    """Supervisor: 다음 agent 결정"""
+    if not state["financials"]:
+        print("[Supervisor] 재무 데이터가 없음 → data_agent로 라우팅 결정")
+        return {**state, "next_agent": "data_agent"}
+
+    prompt = f"""현재 상태:
+- 요청: {state['request']}
+- 기업: {state['company']}
+- 재무 데이터: {'있음' if state['financials'] else '없음'}
+- 분석 완료: {'yes' if state['analysis'] else 'no'}
+- 보고서 생성: {'yes' if state['result'] else 'no'}
+
+다음 단계를 결정하세요. 응답은 정확히 하나만: "data_agent", "analysis_agent", "report_agent" 중 하나.
+
+규칙:
+1. 데이터가 없으면 → "data_agent"
+2. 데이터는 있지만 분석 없으면 → "analysis_agent"
+3. 분석은 있지만 보고서 없으면 → "report_agent"
+4. 모두 완료되면 → "report_agent" (완료 신호)"""
+
+    next_agent = ask(prompt, max_tokens=50).strip()
+
+    if next_agent not in ["data_agent", "analysis_agent", "report_agent"]:
+        next_agent = "analysis_agent"
+
+    print(f"[Supervisor] Claude가 다음 agent 결정: {next_agent}")
+    return {**state, "next_agent": next_agent}
+
+
+def data_agent(state: AnalysisState) -> AnalysisState:
+    """Data Agent: 재무 데이터 수집"""
+    print(f"[Data Agent] {state['company']} 데이터 조회 중...")
     financials = get_financials(state["company"])
-    return {"company": state["company"], "data": financials, "result": "", "analysis": ""}
-
-
-def process_data(state: AnalysisState) -> AnalysisState:
-    d = state["data"]
-    if d:
-        latest_year = max(d.keys())
-        latest_data = d[latest_year]
-        result = f"{latest_year}년 기준 매출액 {latest_data['매출액']:,}억원, 영업이익 {latest_data['영업이익']:,}억원, 순이익 {latest_data['순이익']:,}억원"
+    if financials:
+        print(f"[Data Agent] {len(financials)}개년 데이터 획득 완료")
     else:
-        result = "데이터를 찾을 수 없습니다."
-    return {"company": state["company"], "data": d, "result": result, "analysis": ""}
+        print(f"[Data Agent] 데이터를 찾을 수 없음")
+    return {**state, "financials": financials}
 
 
-def analyze(state: AnalysisState) -> AnalysisState:
-    company = state["company"]
-    d = state["data"]
-    if not d:
+def analysis_agent(state: AnalysisState) -> AnalysisState:
+    """Analysis Agent: 재무 분석"""
+    if not state["financials"]:
         return {**state, "analysis": "분석할 데이터가 없습니다."}
 
-    rows = "\n".join(
-        f"  {year}년: 매출액 {v['매출액']:,}억원, 영업이익 {v['영업이익']:,}억원, 순이익 {v['순이익']:,}억원"
-        for year, v in sorted(d.items())
-    )
-    prompt = f"""다음은 {company}의 최근 3개년 재무 데이터입니다 (단위: 억원):
+    print(f"[Analysis Agent] {state['company']} 분석 중...")
+    analysis_text = analyze_financials(state["financials"])
+    print(f"[Analysis Agent] 분석 완료")
+    return {**state, "analysis": analysis_text}
 
-{rows}
 
-위 데이터를 바탕으로 아래 항목을 한국어로 분석해주세요:
-1. 매출 및 수익성 추이 (2~3문장)
-2. 주목할 만한 변화 또는 리스크 (2~3문장)
-3. 종합 의견 (1~2문장)"""
+def report_agent(state: AnalysisState) -> AnalysisState:
+    """Report Agent: 보고서 생성 (현재는 결과 요약만)"""
+    if not state["analysis"]:
+        return {**state, "result": "분석이 완료되지 않아 보고서를 생성할 수 없습니다."}
 
-    analysis = ask(prompt, max_tokens=800)
-    return {**state, "analysis": analysis}
+    print(f"[Report Agent] 보고서 생성 중...")
+    result = f"""
+[{state['company']} 재무 분석 보고서]
+
+요청: {state['request']}
+분석 결과:
+{state['analysis']}
+
+PDF 경로: 준비 중...
+"""
+    print(f"[Report Agent] 보고서 생성 완료")
+    return {**state, "result": result, "pdf_path": ""}
+
+
+def check_financials(state: AnalysisState) -> Literal["no_data", "has_data"]:
+    """데이터 존재 여부 확인"""
+    return "has_data" if state["financials"] else "no_data"
 
 
 def build_graph():
+    """LangGraph Supervisor 파이프라인"""
     graph = StateGraph(AnalysisState)
-    graph.add_node("load_data", load_data)
-    graph.add_node("process_data", process_data)
-    graph.add_node("analyze", analyze)
-    graph.set_entry_point("load_data")
-    graph.add_edge("load_data", "process_data")
-    graph.add_edge("process_data", "analyze")
-    graph.add_edge("analyze", END)
+
+    # 노드 등록
+    graph.add_node("supervisor", supervisor_node)
+    graph.add_node("data_agent", data_agent)
+    graph.add_node("analysis_agent", analysis_agent)
+    graph.add_node("report_agent", report_agent)
+
+    # 진입점
+    graph.set_entry_point("supervisor")
+
+    # 조건부 라우팅: data_agent 후 financials 확인
+    graph.add_edge("supervisor", "data_agent")
+    graph.add_conditional_edges(
+        "data_agent",
+        check_financials,
+        {
+            "no_data": END,
+            "has_data": "analysis_agent",
+        },
+    )
+
+    # 고정 경로: analysis_agent → report_agent → END
+    graph.add_edge("analysis_agent", "report_agent")
+    graph.add_edge("report_agent", END)
+
     return graph.compile()
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows cp949 한글 깨짐 방지
+
     app = build_graph()
-    final_state = app.invoke({"company": "삼성전자", "data": {}, "result": "", "analysis": ""})
-    print(final_state["analysis"])
+    initial_state = {
+        "request": "삼성전자 재무 분석해줘",
+        "company": "삼성전자",
+        "next_agent": "",
+        "financials": {},
+        "analysis": "",
+        "result": "",
+        "pdf_path": "",
+    }
+
+    print("=" * 60)
+    print("LangGraph Supervisor 파이프라인 실행")
+    print("=" * 60)
+    final_state = app.invoke(initial_state)
+    print("=" * 60)
+    print("최종 상태:")
+    print("=" * 60)
+    print(f"[company] {final_state['company']}")
+    print(f"[next_agent] {final_state['next_agent']}")
+    print(f"[financials] {len(final_state['financials'])}개년 데이터")
+    print(f"[result]\n{final_state['result']}")
