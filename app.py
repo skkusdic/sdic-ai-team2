@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import os
 from graph import build_graph
 
 st.set_page_config(page_title="AI 재무 컨설팅 어시스턴트", page_icon="📊", layout="wide")
@@ -201,9 +202,17 @@ with st.sidebar:
     st.markdown("**분석 기업**")
     st.markdown("삼성전자")
     st.markdown("**현재 주차**")
-    st.markdown("2주차")
+    st.markdown("3주차")
     st.divider()
-    st.markdown('<span class="tag-green">● DART API 연동 준비중</span>', unsafe_allow_html=True)
+    st.markdown("**에이전트 실행 상태**")
+    data_status = st.session_state.get("agent_data", False)
+    analysis_status = st.session_state.get("agent_analysis", False)
+    report_status = st.session_state.get("agent_report", False)
+    st.markdown(f"{'✅' if data_status else '○'} Data Agent")
+    st.markdown(f"{'✅' if analysis_status else '○'} Analysis Agent")
+    st.markdown(f"{'✅' if report_status else '○'} Report Agent")
+    st.divider()
+    st.markdown('<span class="tag-green">● DART API 연동</span>', unsafe_allow_html=True)
 
 # 페이지 헤더
 st.markdown("""
@@ -222,59 +231,93 @@ with col2:
 
 if analyze_btn:
     if not company:
-        st.warning("기업명을 입력해주세요.")
+        st.error("기업명을 입력해주세요.")
     else:
+        # 에이전트 상태 초기화
+        st.session_state["agent_data"] = False
+        st.session_state["agent_analysis"] = False
+        st.session_state["agent_report"] = False
+
         with st.spinner("데이터 불러오는 중..."):
             pipeline = build_graph()
-            state = pipeline.invoke({"company": company, "data": {}, "result": "", "analysis": ""})
+            graph_state = pipeline.invoke({
+                "request": f"{company} 재무 분석해줘",
+                "company": company,
+                "next_agent": "",
+                "financials": {},
+                "analysis": "",
+                "result": "",
+                "pdf_path": "",
+            })
 
-        financials = state["data"]
+        financials = graph_state.get("financials", {})
+        analysis = graph_state.get("analysis", "")
+        pdf_path = graph_state.get("pdf_path", "")
+
+        # 에이전트 완료 상태 반영
+        st.session_state["agent_data"] = bool(financials)
+        st.session_state["agent_analysis"] = bool(analysis)
+        st.session_state["agent_report"] = bool(pdf_path)
 
         if not financials:
-            st.error(f"'{company}' 데이터를 찾을 수 없습니다.")
+            st.error(graph_state.get("result", f"'{company}' 데이터를 찾을 수 없습니다."))
         else:
             latest_year = max(financials.keys())
             latest = financials[latest_year]
             num_years = len(financials)
 
-            # 핵심 지표 카드
-            st.markdown(f'<div class="section-header">핵심 지표 — {latest_year}년</div>', unsafe_allow_html=True)
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.markdown(f"""<div class="metric-card">
-                    <div class="metric-label">매출액</div>
-                    <div class="metric-value">{latest['매출액']:,}억</div>
-                    <div class="metric-sub">{latest_year}년 기준</div>
-                </div>""", unsafe_allow_html=True)
-            with c2:
-                st.markdown(f"""<div class="metric-card">
-                    <div class="metric-label">영업이익</div>
-                    <div class="metric-value">{latest['영업이익']:,}억</div>
-                    <div class="metric-sub">{latest_year}년 기준</div>
-                </div>""", unsafe_allow_html=True)
-            with c3:
-                st.markdown(f"""<div class="metric-card">
-                    <div class="metric-label">순이익</div>
-                    <div class="metric-value">{latest['순이익']:,}억</div>
-                    <div class="metric-sub">{latest_year}년 기준</div>
-                </div>""", unsafe_allow_html=True)
+            tab1, tab2 = st.tabs(["재무 데이터", "Claude 분석"])
 
-            # 재무 테이블 — 개년수 동적 표시
-            st.markdown(f'<div class="section-header">{company} {num_years}개년 재무 현황</div>', unsafe_allow_html=True)
-            df = pd.DataFrame([
-                {
-                    "연도": year,
-                    "매출액 (억원)": v["매출액"],
-                    "영업이익 (억원)": v["영업이익"],
-                    "순이익 (억원)": v["순이익"],
-                }
-                for year, v in sorted(financials.items())
-            ])
-            st.dataframe(df.set_index("연도"), use_container_width=True)
-            st.markdown('<div class="source-text">출처: 금융감독원 전자공시시스템 (DART) · dart.fss.or.kr</div>', unsafe_allow_html=True)
+            with tab1:
+                # 핵심 지표 카드
+                st.markdown(f'<div class="section-header">핵심 지표 — {latest_year}년</div>', unsafe_allow_html=True)
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.markdown(f"""<div class="metric-card">
+                        <div class="metric-label">매출액</div>
+                        <div class="metric-value">{latest['매출액']:,}억</div>
+                        <div class="metric-sub">{latest_year}년 기준</div>
+                    </div>""", unsafe_allow_html=True)
+                with c2:
+                    st.markdown(f"""<div class="metric-card">
+                        <div class="metric-label">영업이익</div>
+                        <div class="metric-value">{latest['영업이익']:,}억</div>
+                        <div class="metric-sub">{latest_year}년 기준</div>
+                    </div>""", unsafe_allow_html=True)
+                with c3:
+                    st.markdown(f"""<div class="metric-card">
+                        <div class="metric-label">순이익</div>
+                        <div class="metric-value">{latest['순이익']:,}억</div>
+                        <div class="metric-sub">{latest_year}년 기준</div>
+                    </div>""", unsafe_allow_html=True)
 
-            # Claude 분석
-            st.markdown('<div class="section-header">🤖 Claude AI 분석</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="analysis-card">{state["analysis"]}</div>', unsafe_allow_html=True)
+                # 재무 테이블
+                st.markdown(f'<div class="section-header">{company} {num_years}개년 재무 현황</div>', unsafe_allow_html=True)
+                df = pd.DataFrame([
+                    {
+                        "연도": year,
+                        "매출액 (억원)": v["매출액"],
+                        "영업이익 (억원)": v["영업이익"],
+                        "순이익 (억원)": v["순이익"],
+                    }
+                    for year, v in sorted(financials.items())
+                ])
+                st.dataframe(df.set_index("연도"), use_container_width=True)
+                st.markdown('<div class="source-text">출처: 금융감독원 전자공시시스템 (DART) · dart.fss.or.kr</div>', unsafe_allow_html=True)
+
+            with tab2:
+                if analysis:
+                    st.markdown(f'<div class="analysis-card">{analysis}</div>', unsafe_allow_html=True)
+                else:
+                    st.info("분석 결과가 없습니다.")
+
+                if pdf_path and os.path.exists(pdf_path):
+                    with open(pdf_path, "rb") as f:
+                        st.download_button(
+                            label="📄 PDF 보고서 다운로드",
+                            data=f,
+                            file_name=os.path.basename(pdf_path),
+                            mime="application/pdf",
+                        )
 
             st.success("분석 완료!")
