@@ -1,8 +1,19 @@
 import sys
 import os
+from typing import TypedDict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from claude_client import ask
+
+
+class AnalysisState(TypedDict):
+    request: str
+    company: str
+    next_agent: str
+    financials: dict
+    analysis: str
+    result: str
+    pdf_path: str
 
 
 def analyze(financials: dict) -> str:
@@ -52,6 +63,17 @@ def analyze(financials: dict) -> str:
 분석 텍스트만 반환하세요."""
 
     return ask(prompt)
+
+
+def analysis_agent(state: AnalysisState) -> AnalysisState:
+    """Analysis Agent: 재무 분석"""
+    if not state["financials"]:
+        return {**state, "analysis": "분석할 데이터가 없습니다."}
+
+    print(f"[Analysis Agent] {state['company']} 분석 중...")
+    analysis_text = analyze(state["financials"])
+    print(f"[Analysis Agent] 분석 완료")
+    return {**state, "analysis": analysis_text}
 
 
 if __name__ == "__main__":

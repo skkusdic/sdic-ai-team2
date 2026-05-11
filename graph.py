@@ -87,6 +87,11 @@ PDF 경로: 준비 중...
     return {**state, "result": result, "pdf_path": ""}
 
 
+def route_by_next_agent(state: AnalysisState) -> str:
+    """Supervisor의 next_agent 값에 따라 라우팅"""
+    return state["next_agent"]
+
+
 def check_financials(state: AnalysisState) -> Literal["no_data", "has_data"]:
     """데이터 존재 여부 확인"""
     return "has_data" if state["financials"] else "no_data"
@@ -105,8 +110,18 @@ def build_graph():
     # 진입점
     graph.set_entry_point("supervisor")
 
+    # 조건부 라우팅: supervisor의 next_agent 결정에 따라 분기
+    graph.add_conditional_edges(
+        "supervisor",
+        route_by_next_agent,
+        {
+            "data_agent": "data_agent",
+            "analysis_agent": "analysis_agent",
+            "report_agent": "report_agent",
+        },
+    )
+
     # 조건부 라우팅: data_agent 후 financials 확인
-    graph.add_edge("supervisor", "data_agent")
     graph.add_conditional_edges(
         "data_agent",
         check_financials,
