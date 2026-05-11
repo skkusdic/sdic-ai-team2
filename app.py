@@ -1,63 +1,57 @@
 import streamlit as st
 import pandas as pd
 import os
+import plotly.express as px
 from graph import build_graph
 
-st.set_page_config(page_title="AI 재무 컨설팅 어시스턴트", page_icon="📊", layout="wide")
+st.set_page_config(page_title="AI 재무 컨설팅 어시스턴트", layout="wide")
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap');
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
 html, body, [class*="css"], input, button, textarea, select,
 .stMarkdown, .stTextInput, .stButton, p, div, span, h1, h2, h3, h4, h5, h6 {
-    font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 
-/* 전체 배경 */
-.stApp { background-color: #f7f9f7; overflow: hidden; }
+.stApp { background-color: #f0f7f2; overflow: hidden; }
 
-/* 무지개 뿌연 데코 */
 .stApp::before {
     content: '';
-    position: fixed;
-    top: -120px; left: -80px;
-    width: 480px; height: 480px;
-    background: radial-gradient(circle, rgba(134,197,152,0.35) 0%, rgba(100,180,140,0.15) 50%, transparent 70%);
-    border-radius: 50%;
-    filter: blur(60px);
+    position: fixed; top: -140px; left: -100px;
+    width: 560px; height: 560px;
+    background: radial-gradient(circle, rgba(82,183,136,0.30) 0%, rgba(45,106,79,0.10) 50%, transparent 70%);
+    border-radius: 50%; filter: blur(70px);
     z-index: 0; pointer-events: none;
 }
 .stApp::after {
     content: '';
-    position: fixed;
-    top: 60px; right: -100px;
-    width: 420px; height: 420px;
-    background: radial-gradient(circle, rgba(180,220,160,0.28) 0%, rgba(120,200,180,0.12) 50%, transparent 70%);
-    border-radius: 50%;
-    filter: blur(70px);
-    z-index: 0; pointer-events: none;
-}
-.deco-blob-1 {
-    position: fixed; bottom: 100px; left: 30%;
-    width: 360px; height: 360px;
-    background: radial-gradient(circle, rgba(160,220,140,0.2) 0%, transparent 80%);
+    position: fixed; top: 50px; right: -120px;
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(134,197,152,0.25) 0%, rgba(100,180,140,0.10) 50%, transparent 70%);
     border-radius: 50%; filter: blur(80px);
     z-index: 0; pointer-events: none;
 }
+.deco-blob-1 {
+    position: fixed; bottom: 80px; left: 25%;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(160,220,140,0.18) 0%, transparent 80%);
+    border-radius: 50%; filter: blur(90px);
+    z-index: 0; pointer-events: none;
+}
 .deco-blob-2 {
-    position: fixed; top: 40%; right: 15%;
-    width: 280px; height: 280px;
-    background: radial-gradient(circle, rgba(200,230,180,0.22) 0%, transparent 80%);
-    border-radius: 50%; filter: blur(65px);
+    position: fixed; top: 45%; right: 10%;
+    width: 320px; height: 320px;
+    background: radial-gradient(circle, rgba(52,211,153,0.15) 0%, transparent 80%);
+    border-radius: 50%; filter: blur(70px);
     z-index: 0; pointer-events: none;
 }
 
-/* 사이드바 */
 [data-testid="stSidebar"] {
-    background-color: rgba(255,255,255,0.85);
-    backdrop-filter: blur(12px);
-    border-right: 1px solid #e2ebe3;
+    background: linear-gradient(180deg, rgba(240,247,242,0.97) 0%, rgba(255,255,255,0.92) 100%);
+    backdrop-filter: blur(16px);
+    border-right: 1px solid #c8e6c9;
 }
 [data-testid="stSidebar"] .stMarkdown p {
     color: #3a4a3d; font-size: 0.88rem; padding: 0.2rem 0;
@@ -65,137 +59,189 @@ html, body, [class*="css"], input, button, textarea, select,
 
 h1 { display: none; }
 
-/* 페이지 헤더 */
-.page-header {
-    font-size: 1.9rem;
-    font-weight: 800;
-    color: #1a2e1f;
-    line-height: 1.2;
-    margin-bottom: 0.3rem;
+.hero-banner {
+    background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 45%, #40916c 100%);
+    border-radius: 24px;
+    padding: 2.2rem 2.4rem 2rem;
+    margin-bottom: 1.8rem;
+    position: relative; overflow: hidden;
+    box-shadow: 0 8px 32px rgba(27,67,50,0.22);
 }
-.highlight-text {
-    background: linear-gradient(120deg, #86c598 0%, #52b788 100%);
-    background-repeat: no-repeat;
-    background-size: 100% 38%;
-    background-position: 0 88%;
-    padding: 0 2px;
+.hero-banner::before {
+    content: ''; position: absolute;
+    top: -60px; right: -60px;
+    width: 260px; height: 260px;
+    background: rgba(255,255,255,0.06); border-radius: 50%;
 }
-.page-sub {
-    font-size: 0.88rem; color: #6b7f6e; margin-bottom: 1.8rem;
+.hero-banner::after {
+    content: ''; position: absolute;
+    bottom: -40px; left: 30%;
+    width: 180px; height: 180px;
+    background: rgba(255,255,255,0.04); border-radius: 50%;
+}
+.hero-title {
+    font-size: 2rem; font-weight: 800;
+    color: #ffffff; line-height: 1.15;
+    letter-spacing: -0.04em; margin-bottom: 0.5rem;
+    position: relative; z-index: 1;
+}
+.hero-title span {
+    background: linear-gradient(90deg, #95d5b2, #d8f3dc);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.hero-sub {
+    font-size: 0.88rem; color: rgba(255,255,255,0.72);
+    position: relative; z-index: 1;
+}
+.hero-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 20px; padding: 0.25rem 0.9rem;
+    font-size: 0.72rem; font-weight: 600;
+    color: rgba(255,255,255,0.9);
+    margin-bottom: 1rem; position: relative; z-index: 1;
 }
 
-/* 검색창 */
 .stTextInput > div > div > input {
     border-radius: 14px !important;
-    border: 2.5px solid #2d6a4f !important;
-    padding: 0.7rem 1.2rem !important;
-    font-size: 0.95rem !important;
-    font-weight: 600 !important;
-    background: rgba(255,255,255,0.9) !important;
-    color: #1a2e1f !important;
+    border: 2px solid #b7dfc4 !important;
+    padding: 0.9rem 1.2rem !important;
+    font-size: 0.95rem !important; font-weight: 500 !important;
+    background: rgba(255,255,255,0.95) !important; color: #1a2e1f !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+    box-sizing: border-box !important;
 }
 .stTextInput > div > div > input:focus {
-    border-color: #1b4332 !important;
-    box-shadow: none !important;
+    border-color: #2d6a4f !important;
+    box-shadow: 0 0 0 3px rgba(45,106,79,0.12) !important;
     background: #ffffff !important;
 }
 .stTextInput > div > div > input::placeholder {
     color: #a0b8a6 !important; font-weight: 400 !important;
 }
 
-/* 버튼 */
 [data-testid="stButton"] > button {
-    background-color: #2d6a4f !important;
-    color: white !important;
-    border-radius: 14px !important;
-    border: 2.5px solid #2d6a4f !important;
-    font-weight: 700 !important;
-    font-size: 0.95rem !important;
-    padding: 0.7rem 1.4rem !important;
+    background: linear-gradient(135deg, #2d6a4f 0%, #40916c 100%) !important;
+    color: white !important; border-radius: 14px !important; border: none !important;
+    font-weight: 700 !important; font-size: 0.95rem !important;
+    padding: 0.9rem 1.4rem !important;
+    box-shadow: 0 4px 14px rgba(45,106,79,0.30) !important;
+    transition: transform 0.15s, box-shadow 0.15s !important;
 }
 [data-testid="stButton"] > button:hover {
-    background-color: #1b4332 !important;
-    border-color: #1b4332 !important;
+    background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%) !important;
+    box-shadow: 0 6px 20px rgba(45,106,79,0.40) !important;
+    transform: translateY(-1px) !important;
 }
+[data-testid="stButton"] > button:active { transform: translateY(0px) !important; }
 
-/* 지표 카드 */
-.metric-card {
-    background: rgba(255,255,255,0.88);
-    backdrop-filter: blur(10px);
-    border-radius: 18px;
-    padding: 1.4rem 1.6rem;
-    box-shadow: 0 4px 20px rgba(45,106,79,0.08);
-    border: 1.5px solid #d8ead9;
+.step-row {
+    display: flex; align-items: center; gap: 0.7rem;
+    padding: 0.55rem 0.8rem; border-radius: 12px;
+    margin-bottom: 0.4rem; transition: background 0.3s;
 }
-.metric-label {
-    font-size: 0.72rem; color: #7a9b7e; font-weight: 700;
-    letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.5rem;
-}
-.metric-value {
-    font-size: 1.45rem; font-weight: 800; color: #1a2e1f; letter-spacing: -0.03em;
-}
-.metric-sub { font-size: 0.73rem; color: #b0c8b3; margin-top: 0.35rem; }
+.step-row.done { background: rgba(45,106,79,0.08); }
+.step-row.pending { background: transparent; }
+.step-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.step-dot.done { background: #40916c; }
+.step-dot.pending { background: #c8d8c9; }
+.step-label { font-size: 0.84rem; font-weight: 600; }
+.step-label.done { color: #1b4332; }
+.step-label.pending { color: #8aab8e; }
 
-/* 섹션 헤더 */
+.history-item {
+    padding: 0.45rem 0.8rem; border-radius: 10px;
+    font-size: 0.83rem; font-weight: 600; color: #2d6a4f;
+    background: rgba(45,106,79,0.07);
+    margin-bottom: 0.3rem; cursor: pointer;
+    transition: background 0.15s;
+}
+.history-item:hover { background: rgba(45,106,79,0.14); }
+
 .section-header {
     font-size: 0.95rem; font-weight: 700; color: #0d1f12;
-    margin-bottom: 0.8rem; margin-top: 1.8rem;
+    margin-bottom: 0.8rem; margin-top: 1.6rem;
+    display: flex; align-items: center; gap: 0.5rem;
+}
+.section-header::before {
+    content: ''; display: inline-block;
+    width: 4px; height: 1rem;
+    background: linear-gradient(180deg, #40916c, #2d6a4f);
+    border-radius: 4px;
 }
 
-/* 출처 텍스트 */
 .source-text {
-    font-size: 0.72rem; color: #9ab09d; margin-top: 0.4rem;
+    font-size: 0.70rem; color: #9ab09d; margin-top: 0.4rem;
     font-weight: 400; letter-spacing: 0.01em;
 }
 
-/* Claude 분석 카드 */
 .analysis-card {
-    background: rgba(255,255,255,0.88);
-    backdrop-filter: blur(10px);
-    border-radius: 18px;
-    padding: 1.6rem 2rem;
-    box-shadow: 0 4px 20px rgba(45,106,79,0.08);
-    border: 1.5px solid #d8ead9;
-    color: #2c3e30;
+    background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
+    border-radius: 20px; padding: 1.8rem 2.2rem;
+    box-shadow: 0 4px 24px rgba(45,106,79,0.09);
+    border: 1.5px solid #d0e8d3; color: #2c3e30;
 }
-/* 분석 카드 내부 제목 */
-.analysis-card h1, .analysis-card h2, .analysis-card h3 {
-    font-size: 0.95rem !important;
-    font-weight: 700 !important;
-    color: #1a2e1f !important;
-    margin-top: 1rem !important;
-    margin-bottom: 0.4rem !important;
-}
-/* 분석 카드 본문 */
 .analysis-card p {
-    font-size: 0.88rem !important;
-    line-height: 1.85 !important;
-    color: #2c3e30 !important;
-    margin-bottom: 0.5rem !important;
+    font-size: 0.88rem !important; line-height: 1.9 !important;
+    color: #2c3e30 !important; margin-bottom: 0.5rem !important;
 }
 
-/* 태그 */
 .tag-green {
     display: inline-block; background: #d8f3dc; color: #1b4332;
     border-radius: 20px; padding: 0.2rem 0.75rem;
     font-size: 0.73rem; font-weight: 600;
 }
 
-/* dataframe */
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in   { animation: fadeInUp 0.45s ease both; }
+.fade-in-1 { animation: fadeInUp 0.45s 0.05s ease both; }
+
 [data-testid="stDataFrame"] {
-    border-radius: 16px !important;
-    overflow: hidden;
+    border-radius: 16px !important; overflow: hidden;
     box-shadow: 0 4px 20px rgba(45,106,79,0.08);
-    border: 1.5px solid #d8ead9 !important;
+    border: 1.5px solid #d0e8d3 !important;
+}
+
+[data-testid="stTabs"] [role="tab"] {
+    font-weight: 600 !important; font-size: 0.88rem !important;
+}
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] {
+    color: #1b4332 !important; border-bottom-color: #2d6a4f !important;
+}
+
+/* 입력창-버튼 수직 정렬 */
+[data-testid="stHorizontalBlock"] {
+    align-items: center !important;
+}
+[data-testid="stHorizontalBlock"] .stTextInput {
+    margin-bottom: 0 !important;
+}
+[data-testid="stHorizontalBlock"] [data-testid="stButton"] {
+    margin-bottom: 0 !important;
 }
 </style>
 <div class="deco-blob-1"></div>
 <div class="deco-blob-2"></div>
 """, unsafe_allow_html=True)
 
+# session_state 초기화
+if "history" not in st.session_state:
+    st.session_state["history"] = []
+if "agent_data" not in st.session_state:
+    st.session_state["agent_data"] = False
+if "agent_analysis" not in st.session_state:
+    st.session_state["agent_analysis"] = False
+if "agent_report" not in st.session_state:
+    st.session_state["agent_report"] = False
+
 # 사이드바
 with st.sidebar:
-    st.markdown("### 📊 AI 재무 분석")
+    st.markdown("### AI 재무 분석")
     st.divider()
     st.markdown("**팀**")
     st.markdown("SDIC AI Team 2")
@@ -204,22 +250,36 @@ with st.sidebar:
     st.markdown("**현재 주차**")
     st.markdown("3주차")
     st.divider()
+
     st.markdown("**에이전트 실행 상태**")
-    data_status = st.session_state.get("agent_data", False)
-    analysis_status = st.session_state.get("agent_analysis", False)
-    report_status = st.session_state.get("agent_report", False)
-    st.markdown(f"{'✅' if data_status else '○'} Data Agent")
-    st.markdown(f"{'✅' if analysis_status else '○'} Analysis Agent")
-    st.markdown(f"{'✅' if report_status else '○'} Report Agent")
+    for label, done in [
+        ("Data Agent",     st.session_state["agent_data"]),
+        ("Analysis Agent", st.session_state["agent_analysis"]),
+        ("Report Agent",   st.session_state["agent_report"]),
+    ]:
+        rc = "done" if done else "pending"
+        st.markdown(f"""<div class="step-row {rc}">
+            <div class="step-dot {rc}"></div>
+            <span class="step-label {rc}">{label}</span>
+        </div>""", unsafe_allow_html=True)
+
     st.divider()
+
+    if st.session_state["history"]:
+        st.markdown("**최근 분석 기업**")
+        for name in reversed(st.session_state["history"]):
+            st.markdown(f'<div class="history-item">{name}</div>', unsafe_allow_html=True)
+        st.divider()
+
     st.markdown('<span class="tag-green">● DART API 연동</span>', unsafe_allow_html=True)
 
-# 페이지 헤더
+# 히어로 배너
 st.markdown("""
-<div class="page-header">
-    <span class="highlight-text">재무 컨설팅 대시보드</span>
+<div class="hero-banner fade-in">
+    <div class="hero-badge">SDIC AI Team 2 · 3주차</div>
+    <div class="hero-title">AI <span>재무 컨설팅</span><br>대시보드</div>
+    <div class="hero-sub">기업명을 입력하면 DART 실데이터 기반 재무 분석과 Claude AI 인사이트를 제공합니다.</div>
 </div>
-<div class="page-sub">기업명을 입력하면 재무 데이터와 Claude AI 분석을 제공합니다.</div>
 """, unsafe_allow_html=True)
 
 # 입력 영역
@@ -233,12 +293,33 @@ if analyze_btn:
     if not company:
         st.error("기업명을 입력해주세요.")
     else:
-        # 에이전트 상태 초기화
         st.session_state["agent_data"] = False
         st.session_state["agent_analysis"] = False
         st.session_state["agent_report"] = False
 
-        with st.spinner("데이터 불러오는 중..."):
+        progress_placeholder = st.empty()
+        steps = ["Data Agent", "Analysis Agent", "Report Agent"]
+
+        def render_progress(current_step: int):
+            html = '<div style="display:flex;gap:1rem;align-items:center;padding:1rem 0;">'
+            for i, name in enumerate(steps):
+                if i < current_step:
+                    color, icon = "#40916c", "✓"
+                elif i == current_step:
+                    color, icon = "#2d6a4f", "◌"
+                else:
+                    color, icon = "#c8d8c9", "○"
+                html += f'<div style="display:flex;align-items:center;gap:0.4rem;">'
+                html += f'<span style="color:{color};font-weight:700;font-size:0.9rem;">{icon} {name}</span>'
+                if i < len(steps) - 1:
+                    html += '<span style="color:#d0e8d3;font-size:0.8rem;margin:0 0.2rem;">→</span>'
+                html += '</div>'
+            html += '</div>'
+            progress_placeholder.markdown(html, unsafe_allow_html=True)
+
+        render_progress(0)
+
+        with st.spinner(f"{company} 분석 중..."):
             pipeline = build_graph()
             graph_state = pipeline.invoke({
                 "request": f"{company} 재무 분석해줘",
@@ -250,74 +331,151 @@ if analyze_btn:
                 "pdf_path": "",
             })
 
-        financials = graph_state.get("financials", {})
-        analysis = graph_state.get("analysis", "")
-        pdf_path = graph_state.get("pdf_path", "")
+        render_progress(3)
 
-        # 에이전트 완료 상태 반영
-        st.session_state["agent_data"] = bool(financials)
-        st.session_state["agent_analysis"] = bool(analysis)
-        st.session_state["agent_report"] = bool(pdf_path)
+        st.session_state["agent_data"]     = bool(graph_state.get("financials"))
+        st.session_state["agent_analysis"] = bool(graph_state.get("analysis"))
+        st.session_state["agent_report"]   = bool(graph_state.get("pdf_path"))
 
-        if not financials:
+        # 결과를 session_state에 저장 → PDF 다운로드 후 re-run에서도 화면 유지
+        st.session_state["final_state"] = graph_state
+        st.session_state["company"]     = company
+
+        if company not in st.session_state["history"]:
+            st.session_state["history"].append(company)
+
+        if not graph_state.get("financials"):
             st.error(graph_state.get("result", f"'{company}' 데이터를 찾을 수 없습니다."))
-        else:
-            latest_year = max(financials.keys())
-            latest = financials[latest_year]
-            num_years = len(financials)
 
-            tab1, tab2 = st.tabs(["재무 데이터", "Claude 분석"])
+# 결과 렌더링 — submitted 블록 밖에서 실행 (PDF 클릭 후 re-run에도 유지)
+if "final_state" in st.session_state:
+    final_state = st.session_state["final_state"]
+    company     = st.session_state["company"]
 
-            with tab1:
-                # 핵심 지표 카드
-                st.markdown(f'<div class="section-header">핵심 지표 — {latest_year}년</div>', unsafe_allow_html=True)
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.markdown(f"""<div class="metric-card">
-                        <div class="metric-label">매출액</div>
-                        <div class="metric-value">{latest['매출액']:,}억</div>
-                        <div class="metric-sub">{latest_year}년 기준</div>
-                    </div>""", unsafe_allow_html=True)
-                with c2:
-                    st.markdown(f"""<div class="metric-card">
-                        <div class="metric-label">영업이익</div>
-                        <div class="metric-value">{latest['영업이익']:,}억</div>
-                        <div class="metric-sub">{latest_year}년 기준</div>
-                    </div>""", unsafe_allow_html=True)
-                with c3:
-                    st.markdown(f"""<div class="metric-card">
-                        <div class="metric-label">순이익</div>
-                        <div class="metric-value">{latest['순이익']:,}억</div>
-                        <div class="metric-sub">{latest_year}년 기준</div>
-                    </div>""", unsafe_allow_html=True)
+    financials = final_state.get("financials", {})
+    analysis   = final_state.get("analysis", "")
+    pdf_path   = final_state.get("pdf_path", "")
 
-                # 재무 테이블
-                st.markdown(f'<div class="section-header">{company} {num_years}개년 재무 현황</div>', unsafe_allow_html=True)
-                df = pd.DataFrame([
-                    {
-                        "연도": year,
-                        "매출액 (억원)": v["매출액"],
-                        "영업이익 (억원)": v["영업이익"],
-                        "순이익 (억원)": v["순이익"],
-                    }
-                    for year, v in sorted(financials.items())
-                ])
-                st.dataframe(df.set_index("연도"), use_container_width=True)
-                st.markdown('<div class="source-text">출처: 금융감독원 전자공시시스템 (DART) · dart.fss.or.kr</div>', unsafe_allow_html=True)
+    if financials:
+        sorted_items = sorted(financials.items())
+        latest_year  = sorted_items[-1][0]
+        latest       = sorted_items[-1][1]
+        prev         = sorted_items[-2][1] if len(sorted_items) >= 2 else None
+        num_years    = len(financials)
 
-            with tab2:
-                if analysis:
-                    st.markdown(f'<div class="analysis-card">{analysis}</div>', unsafe_allow_html=True)
-                else:
-                    st.info("분석 결과가 없습니다.")
+        # DataFrame 생성
+        df = pd.DataFrame([
+            {
+                "연도": year,
+                "매출액 (억원)": v["매출액"],
+                "영업이익 (억원)": v["영업이익"],
+                "순이익 (억원)": v["순이익"],
+                "영업이익률 (%)": round(v["영업이익"] / v["매출액"] * 100, 1) if v["매출액"] else 0,
+            }
+            for year, v in sorted_items
+        ])
 
-                if pdf_path and os.path.exists(pdf_path):
-                    with open(pdf_path, "rb") as f:
-                        st.download_button(
-                            label="📄 PDF 보고서 다운로드",
-                            data=f,
-                            file_name=os.path.basename(pdf_path),
-                            mime="application/pdf",
-                        )
+        def delta_pct(curr, prev_val):
+            if prev_val is None or prev_val == 0:
+                return None
+            return f'{(curr - prev_val) / abs(prev_val) * 100:+.1f}%'
 
-            st.success("분석 완료!")
+        latest_rev    = latest["매출액"]
+        latest_op     = latest["영업이익"]
+        latest_net    = latest["순이익"]
+        latest_margin = round(latest_op / latest_rev * 100, 1) if latest_rev else 0
+
+        prev_rev    = prev["매출액"]    if prev else None
+        prev_op     = prev["영업이익"]  if prev else None
+        prev_net    = prev["순이익"]    if prev else None
+        prev_margin = round(prev_op / prev_rev * 100, 1) if (prev and prev_rev) else None
+        delta_margin = f'{latest_margin - prev_margin:+.1f}%p' if prev_margin is not None else None
+
+        def fmt(val):
+            if val >= 10000:
+                return f'{val/10000:.1f} 조원'
+            return f'{val:,} 억원'
+
+        tab1, tab2 = st.tabs(["재무 데이터", "Claude 분석"])
+
+        with tab1:
+            # KPI 카드 4장
+            st.markdown(f'<div class="section-header">핵심 지표 — {latest_year}년</div>', unsafe_allow_html=True)
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric(f'매출액 ({latest_year})',   fmt(latest_rev), delta_pct(latest_rev, prev_rev))
+            c2.metric(f'영업이익 ({latest_year})', fmt(latest_op),  delta_pct(latest_op,  prev_op))
+            c3.metric(f'순이익 ({latest_year})',   fmt(latest_net), delta_pct(latest_net, prev_net))
+            c4.metric(f'영업이익률 ({latest_year})', f'{latest_margin:.1f}%', delta_margin)
+
+            # 재무 테이블
+            st.markdown(f'<div class="section-header">{company} {num_years}개년 재무 현황</div>', unsafe_allow_html=True)
+            st.dataframe(df.set_index("연도"), use_container_width=True)
+            st.markdown('<div class="source-text">출처: 금융감독원 전자공시시스템 (DART) · dart.fss.or.kr</div>', unsafe_allow_html=True)
+
+            # 3지표 추이 차트
+            st.markdown(f'<div class="section-header">{company} {num_years}개년 재무 추이</div>', unsafe_allow_html=True)
+            fig_main = px.line(
+                df, x="연도",
+                y=["매출액 (억원)", "영업이익 (억원)", "순이익 (억원)"],
+                markers=True,
+                title=f"{company} 매출액 / 영업이익 / 순이익 추이",
+                color_discrete_sequence=["#2d6a4f", "#40916c", "#74c69d"],
+            )
+            fig_main.update_layout(
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="Pretendard, sans-serif", size=12, color="#3a4a3d"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(l=0, r=0, t=50, b=0),
+                xaxis=dict(showgrid=False, linecolor="#d0e8d3"),
+                yaxis=dict(gridcolor="rgba(200,230,210,0.4)", linecolor="#d0e8d3",
+                           tickformat=",", title="금액 (억원)"),
+                height=360,
+            )
+            st.plotly_chart(fig_main, use_container_width=True)
+
+            # 영업이익률 차트
+            st.markdown(f'<div class="section-header">{company} 영업이익률 추이</div>', unsafe_allow_html=True)
+            fig_margin = px.line(
+                df, x="연도", y="영업이익률 (%)",
+                markers=True,
+                title=f"{company} 영업이익률 추이",
+            )
+            fig_margin.update_traces(line_color="#FF6B6B")
+            fig_margin.update_layout(
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="Pretendard, sans-serif", size=12, color="#3a4a3d"),
+                margin=dict(l=0, r=0, t=50, b=0),
+                xaxis=dict(showgrid=False, linecolor="#d0e8d3"),
+                yaxis=dict(gridcolor="rgba(200,230,210,0.4)", linecolor="#d0e8d3",
+                           title="영업이익률 (%)"),
+                height=300,
+            )
+            st.plotly_chart(fig_margin, use_container_width=True)
+
+            # YoY 성장률 표
+            st.markdown(f'<div class="section-header">전년 대비 성장률 (YoY)</div>', unsafe_allow_html=True)
+            yoy = df[["연도"]].copy()
+            for col in ["매출액 (억원)", "영업이익 (억원)", "순이익 (억원)"]:
+                yoy[col + " YoY"] = df[col].pct_change().apply(
+                    lambda x: f"{x*100:+.1f}%" if pd.notna(x) else "—"
+                )
+            st.dataframe(yoy.set_index("연도"), use_container_width=True)
+
+        with tab2:
+            if analysis:
+                st.markdown(f'<div class="analysis-card fade-in">{analysis}</div>', unsafe_allow_html=True)
+            else:
+                st.info("분석 결과가 없습니다.")
+
+        # PDF 다운로드 (탭 밖)
+        if pdf_path and os.path.exists(pdf_path):
+            st.markdown("<br>", unsafe_allow_html=True)
+            with open(pdf_path, "rb") as f:
+                st.download_button(
+                    label="PDF 리포트 다운로드",
+                    data=f,
+                    file_name=f"{company}_재무분석.pdf",
+                    mime="application/pdf",
+                )
+
+        st.success(f"{company} 분석 완료!")
