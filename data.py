@@ -45,7 +45,7 @@ def _parse_fs(is_df) -> dict:
         if not mapped:
             continue
         for col, year in year_cols.items():
-            if year not in range(2021, 2026):
+            if year not in range(2020, 2025):
                 continue
             result.setdefault(year, {})
             if mapped not in result[year]:
@@ -58,18 +58,24 @@ def _parse_fs(is_df) -> dict:
 
 
 def _find_corp(corp_list, company_name: str):
-    # 정확히 일치하는 기업 우선, 없으면 이름 포함 검색 후 가장 유사한 것 선택
+    # 1단계: 정확히 일치
     exact = corp_list.find_by_corp_name(company_name, exactly=True)
     if exact:
         return exact[0]
-    fuzzy = corp_list.find_by_corp_name(company_name, exactly=False)
-    if not fuzzy:
+
+    # 2단계: 띄어쓰기 제거 후 정확 일치 ("LG 이노텍" → "LG이노텍")
+    normalized = company_name.replace(" ", "")
+    fuzzy = corp_list.find_by_corp_name(normalized, exactly=True)
+    if fuzzy:
+        return fuzzy[0]
+
+    # 3단계: substring 검색 후 이름이 짧은 것 우선 (가장 정확한 매칭)
+    candidates = corp_list.find_by_corp_name(company_name, exactly=False)
+    if not candidates:
+        candidates = corp_list.find_by_corp_name(normalized, exactly=False)
+    if not candidates:
         return None
-    # 이름이 정확히 같은 것 우선, 없으면 첫 번째
-    for c in fuzzy:
-        if c.corp_name == company_name:
-            return c
-    return fuzzy[0]
+    return min(candidates, key=lambda c: len(c.corp_name))
 
 
 def _fetch_from_dart(company_name: str) -> dict:
@@ -80,7 +86,7 @@ def _fetch_from_dart(company_name: str) -> dict:
     if corp is None:
         return {}
     try:
-        fs = corp.extract_fs(bgn_de="20210101")
+        fs = corp.extract_fs(bgn_de="20200101", end_de="20251231")
     except Exception:
         return {}
     is_df = fs._statements.get("is")
