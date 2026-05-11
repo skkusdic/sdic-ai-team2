@@ -4,10 +4,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from data import get_financials
 
+_cache: dict = {}
+
 
 def run_data_agent(state: dict) -> dict:
     company = state["company"]
-    financials = get_financials(company)
+    if company not in _cache:
+        _cache[company] = get_financials(company)
+    financials = _cache[company]
     return {
         **state,
         "financials": financials,
