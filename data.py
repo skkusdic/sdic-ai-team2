@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import requests
 
 import dart_fss as dart
 from dotenv import load_dotenv
@@ -7,120 +8,132 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DB_PATH = "financials.db"
+DART_API_KEY = os.environ["DART_API_KEY"]
+DART_ENDPOINT = "https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json"
 
-dart.set_api_key(os.environ["DART_API_KEY"])
+dart.set_api_key(DART_API_KEY)
 
 _corp_list_cache = None
 
-_LABEL_MAP = {
-    "매출액": "매출액",
-    "수익(매출액)": "매출액",
-    "영업수익": "매출액",
-    "영업이익": "영업이익",
-    "영업이익(손실)": "영업이익",
-    "당기순이익": "순이익",
-    "당기순이익(손실)": "순이익",
+_REVENUE_LABELS = {"매출액", "영업수익", "수익(매출액)"}
+_OPERATING_LABELS = {"영업이익", "영업이익(손실)", "영업손실"}
+_NET_LABELS = {"당기순이익", "당기순이익(손실)", "당기순손실"}
+
+# DART에 영문/약어로 등록된 회사 한글 별칭 매핑
+_CORP_ALIASES = {
+    "네이버": "NAVER",
+    "케이티": "KT",
+    "에스케이텔레콤": "SK텔레콤",
+    "엘지전자": "LG전자",
+    "엘지이노텍": "LG이노텍",
+    "엘지화학": "LG화학",
+    "엘지에너지솔루션": "LG에너지솔루션",
+    "엘지생활건강": "LG생활건강",
+    "엘지유플러스": "LG유플러스",
+    "에스케이하이닉스": "SK하이닉스",
+    "에스케이이노베이션": "SK이노베이션",
+    "현대차": "현대자동차",
+    "기아차": "기아",
+    "포스코": "POSCO홀딩스",
+    "비비큐": "BBQ",
 }
 
-_TARGET_KEYS = {"매출액", "영업이익", "순이익"}
 
-
-def _parse_fs(is_df) -> dict:
-    """MultiIndex DataFrame에서 연도별 {매출액, 영업이익, 순이익} 추출 (단위: 억원)."""
-    year_cols = {
-        col: int(col[0][:4])
-        for col in is_df.columns
-        if isinstance(col, tuple) and len(col[0]) == 17 and col[0][8] == "-"
-    }
-
-    # level_1 == 'label_ko' 인 컬럼을 직접 찾음
-    label_col = next((c for c in is_df.columns if c[1] == "label_ko"), None)
-    if label_col is None:
-        return {}
-
-    result: dict[int, dict] = {}
-    for _, row in is_df.iterrows():
-        label = str(row[label_col]).strip()
-        mapped = _LABEL_MAP.get(label)
-        if not mapped:
-            continue
-        for col, year in year_cols.items():
-            if year not in range(2020, 2025):
-                continue
-            result.setdefault(year, {})
-            if mapped not in result[year]:
-                try:
-                    result[year][mapped] = int(float(str(row[col]).replace(",", ""))) // 100_000_000
-                except (ValueError, TypeError):
-                    result[year][mapped] = 0
-
-    return {yr: m for yr, m in result.items() if m.keys() >= _TARGET_KEYS}
-
-
-def _find_corp(corp_list, company_name: str):
-    # 1단계: 정확 일치 (상장사 우선)
-    exact = corp_list.find_by_corp_name(company_name, exactly=True)
-    if exact:
-        listed = [c for c in exact if c.stock_code]
-        return listed[0] if listed else exact[0]
-
-    # 2단계: 띄어쓰기 제거 후 정확 일치
-    normalized = company_name.replace(" ", "")
-    fuzzy = corp_list.find_by_corp_name(normalized, exactly=True)
-    if fuzzy:
-        listed = [c for c in fuzzy if c.stock_code]
-        return listed[0] if listed else fuzzy[0]
-
-    # 3단계: substring 검색, 상장사 우선 + 이름 짧은 것 우선
-    candidates = corp_list.find_by_corp_name(company_name, exactly=False)
-    if not candidates:
-        candidates = corp_list.find_by_corp_name(normalized, exactly=False)
-    if not candidates:
-        return None
-    listed = [c for c in candidates if c.stock_code]
-    pool = listed if listed else candidates
-    return min(pool, key=lambda c: len(c.corp_name))
-
-
-def _fetch_fs_statements(corp, separate: bool):
-    """CFS(separate=False) 또는 OFS(separate=True)로 IS 조회. 실패 시 None 반환."""
-    try:
-        fs = corp.extract_fs(
-            bgn_de="20200101",
-            end_de="20251231",
-            fs_tp=("is",),
-            dataset="web",
-            separate=separate,
-            progressbar=False,
-        )
-        return fs._statements.get("is")
-    except Exception:
-        return None
-
-
-def _fetch_from_dart(company_name: str) -> dict:
+def _get_corp_list():
     global _corp_list_cache
     if _corp_list_cache is None:
         _corp_list_cache = dart.get_corp_list()
-    corp = _find_corp(_corp_list_cache, company_name)
-    if corp is None:
+    return _corp_list_cache
+
+
+def _find_corp_code(company_name: str) -> str:
+    corp_list = _get_corp_list()
+    raw = company_name.strip()
+    no_space = raw.replace(" ", "")
+    candidates = [raw]
+    if no_space != raw:
+        candidates.append(no_space)
+    # 한글 → DART 등록명 별칭 추가 (네이버 → NAVER 등)
+    if no_space in _CORP_ALIASES:
+        candidates.append(_CORP_ALIASES[no_space])
+
+    for cand in candidates:
+        results = corp_list.find_by_corp_name(cand, exactly=True) or []
+        listed = [r for r in results if r.stock_code]
+        if listed:
+            return listed[0].corp_code
+        if results:
+            return results[0].corp_code
+
+    for cand in candidates:
+        results = corp_list.find_by_corp_name(cand, exactly=False) or []
+        listed = [r for r in results if r.stock_code]
+        pool = listed if listed else results
+        if pool:
+            return min(pool, key=lambda r: len(r.corp_name)).corp_code
+
+    return ""
+
+
+def _extract_year(corp_code: str, year: int, fs_div: str) -> dict:
+    """fnlttSinglAcntAll API로 단년 손익 추출 (XBRL 우회). fs_div: 'CFS' 또는 'OFS'."""
+    params = {
+        "crtfc_key": DART_API_KEY,
+        "corp_code": corp_code,
+        "bsns_year": str(year),
+        "reprt_code": "11011",
+        "fs_div": fs_div,
+    }
+    try:
+        resp = requests.get(DART_ENDPOINT, params=params, timeout=10).json()
+    except Exception:
         return {}
 
-    # CFS(연결) 먼저, 빈 결과면 OFS(별도) fallback
-    for separate in (False, True):
-        is_df = _fetch_fs_statements(corp, separate)
-        if is_df is not None and not is_df.empty:
-            result = _parse_fs(is_df)
-            if result:
-                return result
+    items = resp.get("list", [])
+    data = {}
+    for item in items:
+        if item.get("sj_div") not in ("IS", "CIS"):
+            continue
+        nm = item.get("account_nm", "").strip()
+        amt = item.get("thstrm_amount", "").replace(",", "")
+        if not amt or amt == "-":
+            continue
+        try:
+            val = int(amt) // 100_000_000
+        except (ValueError, TypeError):
+            continue
+        if nm in _REVENUE_LABELS and "매출액" not in data:
+            data["매출액"] = val
+        elif nm in _OPERATING_LABELS and "영업이익" not in data:
+            data["영업이익"] = val
+        elif nm in _NET_LABELS and "순이익" not in data:
+            data["순이익"] = val
+    return data
 
-    return {}
+
+def _fetch_from_dart(company_name: str) -> dict:
+    corp_code = _find_corp_code(company_name)
+    if not corp_code:
+        return {}
+
+    result = {}
+    for year in range(2020, 2025):
+        # CFS(연결) 먼저, 없으면 OFS(별도) fallback
+        year_data = _extract_year(corp_code, year, "CFS")
+        if not year_data or not {"매출액", "영업이익", "순이익"}.issubset(year_data):
+            ofs = _extract_year(corp_code, year, "OFS")
+            if ofs:
+                # CFS에서 부분적으로 받은 키 보존, 빈 곳만 OFS로 채움
+                for k, v in ofs.items():
+                    year_data.setdefault(k, v)
+        if {"매출액", "영업이익", "순이익"}.issubset(year_data):
+            result[year] = year_data
+
+    return result
 
 
-def _save_to_db(company_name: str, data: dict) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("""
+def _init_db(conn: sqlite3.Connection) -> None:
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS financials (
             company  TEXT,
             year     INTEGER,
@@ -130,37 +143,61 @@ def _save_to_db(company_name: str, data: dict) -> None:
             PRIMARY KEY (company, year)
         )
     """)
-    for year, metrics in data.items():
-        cur.execute("""
-            INSERT OR REPLACE INTO financials (company, year, 매출액, 영업이익, 순이익)
-            VALUES (?, ?, ?, ?, ?)
-        """, (company_name, int(year), metrics["매출액"], metrics["영업이익"], metrics["순이익"]))
-    conn.commit()
-    conn.close()
+
+
+def _save_to_db(company_name: str, data: dict) -> None:
+    with sqlite3.connect(DB_PATH) as conn:
+        _init_db(conn)
+        for year, m in data.items():
+            conn.execute(
+                "INSERT OR REPLACE INTO financials (company, year, 매출액, 영업이익, 순이익) VALUES (?, ?, ?, ?, ?)",
+                (company_name, int(year), m["매출액"], m["영업이익"], m["순이익"]),
+            )
+        conn.commit()
+
+
+def _load_from_db(company_name: str) -> dict:
+    if not os.path.exists(DB_PATH):
+        return {}
+    with sqlite3.connect(DB_PATH) as conn:
+        _init_db(conn)
+        rows = conn.execute(
+            "SELECT year, 매출액, 영업이익, 순이익 FROM financials WHERE company = ? ORDER BY year",
+            (company_name,),
+        ).fetchall()
+    return {
+        str(year): {"매출액": rev, "영업이익": op, "순이익": net}
+        for year, rev, op, net in rows
+    }
 
 
 def get_financials(company_name: str) -> dict:
-    """5개년(2020~2024) 재무 데이터를 반환. 키는 문자열 연도('2020'~'2024')."""
+    """5개년(2020~2024) 재무 데이터. 키는 문자열 연도('2020'~'2024'). 단위: 억원."""
+    cached = _load_from_db(company_name)
+    if cached:
+        return cached
+
     raw = _fetch_from_dart(company_name)
     if not raw:
         return {}
-    # 키를 문자열로 정규화
+
     data = {str(year): metrics for year, metrics in raw.items()}
     _save_to_db(company_name, data)
     return data
 
 
 if __name__ == "__main__":
-    data = get_financials("삼성전자")
-    if not data:
-        print("데이터를 가져오지 못했습니다.")
-    else:
-        print(f"{'연도':<6} {'매출액':>12} {'영업이익':>12} {'순이익':>12}  (단위: 억원)")
-        print("-" * 50)
-        for year, metrics in sorted(data.items()):
-            print(
-                f"{year:<6} "
-                f"{metrics['매출액']:>12,} "
-                f"{metrics['영업이익']:>12,} "
-                f"{metrics['순이익']:>12,}"
-            )
+    import sys
+    import time
+    sys.stdout.reconfigure(encoding="utf-8")
+
+    for name in ["삼성전자", "카카오", "LG이노텍", "에이피알", "네이버", "asdfasdf"]:
+        t0 = time.time()
+        d = get_financials(name)
+        elapsed = time.time() - t0
+        if not d:
+            print(f"[{name}] no data ({elapsed:.1f}s)")
+            continue
+        print(f"[{name}] {len(d)}개년 ({elapsed:.1f}s)")
+        for y, m in sorted(d.items()):
+            print(f"  {y}: {m}")

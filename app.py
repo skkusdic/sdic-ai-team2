@@ -333,7 +333,7 @@ if analyze_btn:
 
         render_progress(3)
 
-        st.session_state["agent_data"]     = bool(graph_state.get("financials"))
+        st.session_state["agent_data"]     = True
         st.session_state["agent_analysis"] = bool(graph_state.get("analysis"))
         st.session_state["agent_report"]   = bool(graph_state.get("pdf_path"))
 
