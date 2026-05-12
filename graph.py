@@ -1,9 +1,10 @@
 import sys
 from langgraph.graph import StateGraph, END
 from typing import TypedDict, Literal
-from data import get_financials
 from claude_client import ask
 from agents.analysis_agent import analyze as analyze_financials
+from agents.data_agent import run_data_agent
+from agents.report_agent import run_report_agent
 
 
 class AnalysisState(TypedDict):
@@ -49,12 +50,12 @@ def supervisor_node(state: AnalysisState) -> AnalysisState:
 def data_agent(state: AnalysisState) -> AnalysisState:
     """Data Agent: 재무 데이터 수집"""
     print(f"[Data Agent] {state['company']} 데이터 조회 중...")
-    financials = get_financials(state["company"])
-    if financials:
-        print(f"[Data Agent] {len(financials)}개년 데이터 획득 완료")
+    result = run_data_agent(state)
+    if result["financials"]:
+        print(f"[Data Agent] {len(result['financials'])}개년 데이터 획득 완료")
     else:
         print(f"[Data Agent] 데이터를 찾을 수 없음")
-    return {**state, "financials": financials}
+    return result
 
 
 def analysis_agent(state: AnalysisState) -> AnalysisState:
@@ -69,22 +70,24 @@ def analysis_agent(state: AnalysisState) -> AnalysisState:
 
 
 def report_agent(state: AnalysisState) -> AnalysisState:
-    """Report Agent: 보고서 생성 (현재는 결과 요약만)"""
+    """Report Agent: 보고서 생성"""
     if not state["analysis"]:
         return {**state, "result": "분석이 완료되지 않아 보고서를 생성할 수 없습니다."}
 
     print(f"[Report Agent] 보고서 생성 중...")
-    result = f"""
+    result_state = run_report_agent(state)
+    print(f"[Report Agent] 보고서 생성 완료 (PDF: {result_state.get('pdf_path', 'N/A')})")
+
+    result_text = f"""
 [{state['company']} 재무 분석 보고서]
 
 요청: {state['request']}
 분석 결과:
 {state['analysis']}
 
-PDF 경로: 준비 중...
+PDF 경로: {result_state.get('pdf_path', 'N/A')}
 """
-    print(f"[Report Agent] 보고서 생성 완료")
-    return {**state, "result": result, "pdf_path": ""}
+    return {**result_state, "result": result_text}
 
 
 def route_by_next_agent(state: AnalysisState) -> str:

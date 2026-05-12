@@ -35,7 +35,7 @@ def analyze(financials: dict) -> str:
             op_margin = 0
 
         financial_summary.append(
-            f"{year}년: 매출액 {revenue:,.0f}원, 영업이익 {op_profit:,.0f}원 (영업이익률 {op_margin:.1f}%), 순이익 {net_profit:,.0f}원"
+            f"{year}년: 매출액 {revenue:,.0f}억원, 영업이익 {op_profit:,.0f}억원 (영업이익률 {op_margin:.1f}%), 순이익 {net_profit:,.0f}억원"
         )
 
     # 최신 연도 정보
