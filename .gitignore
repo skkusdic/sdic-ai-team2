@@ -6,4 +6,7 @@ venv/
 .venv/
 .DS_Store
 data/
-financials.db
+.streamlit/secrets.toml
+*.db
+*.bak
+.claude/
