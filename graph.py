@@ -1,6 +1,6 @@
 import sys
 from langgraph.graph import StateGraph, END
-from typing import TypedDict, Literal
+from typing import TypedDict, Literal, Optional
 from claude_client import ask
 from agents.analysis_agent import analyze as analyze_financials, analysis_agent
 from agents.data_agent import run_data_agent
@@ -15,6 +15,7 @@ class AnalysisState(TypedDict):
     analysis: str
     result: str
     pdf_path: str
+    data_source: Optional[str]
 
 
 def supervisor_node(state: AnalysisState) -> AnalysisState:
@@ -122,6 +123,7 @@ if __name__ == "__main__":
         "analysis": "",
         "result": "",
         "pdf_path": "",
+        "data_source": None,
     }
 
     print("=" * 60)
