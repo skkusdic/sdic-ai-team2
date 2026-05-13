@@ -2,7 +2,28 @@ import streamlit as st
 import pandas as pd
 import os
 import plotly.express as px
+
+# Streamlit Cloud: secrets → os.environ 동기화 (로컬엔 secrets.toml 없으므로 무시)
+try:
+    for _key in ["DART_API_KEY", "ANTHROPIC_API_KEY"]:
+        if _key in st.secrets and _key not in os.environ:
+            os.environ[_key] = st.secrets[_key]
+except Exception:
+    pass
+
 from graph import build_graph
+
+try:
+    from rag import search as rag_search, answer as rag_answer
+    RAG_AVAILABLE = True
+except ImportError:
+    RAG_AVAILABLE = False
+
+try:
+    from text2sql import query as text2sql_query
+    TEXT2SQL_AVAILABLE = True
+except ImportError:
+    TEXT2SQL_AVAILABLE = False
 
 st.set_page_config(page_title="AI 재무 컨설팅 어시스턴트", layout="wide")
 
@@ -160,6 +181,23 @@ h1 { display: none; }
 }
 .history-item:hover { background: rgba(45,106,79,0.14); }
 
+[data-testid="stSidebar"] [data-testid="stButton"] > button {
+    background: rgba(45,106,79,0.07) !important;
+    color: #2d6a4f !important;
+    border: none !important;
+    border-radius: 10px !important;
+    font-size: 0.83rem !important;
+    font-weight: 600 !important;
+    padding: 0.45rem 0.8rem !important;
+    box-shadow: none !important;
+    text-align: left !important;
+}
+[data-testid="stSidebar"] [data-testid="stButton"] > button:hover {
+    background: rgba(45,106,79,0.14) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
 .section-header {
     font-size: 0.95rem; font-weight: 700; color: #0d1f12;
     margin-bottom: 0.8rem; margin-top: 1.6rem;
@@ -246,17 +284,19 @@ with st.sidebar:
     st.markdown("**팀**")
     st.markdown("SDIC AI Team 2")
     st.markdown("**분석 기업**")
-    st.markdown("삼성전자")
+    st.markdown(st.session_state.get("company", "—"))
     st.markdown("**현재 주차**")
-    st.markdown("3주차")
+    st.markdown("4주차")
     st.divider()
 
     st.markdown("**에이전트 실행 상태**")
-    for label, done in [
-        ("Data Agent",     st.session_state["agent_data"]),
-        ("Analysis Agent", st.session_state["agent_analysis"]),
-        ("Report Agent",   st.session_state["agent_report"]),
-    ]:
+    fs = st.session_state.get("final_state", {})
+    agent_states = [
+        ("Data Agent",     st.session_state["agent_data"]     or bool(fs.get("financials"))),
+        ("Analysis Agent", st.session_state["agent_analysis"] or bool(fs.get("analysis"))),
+        ("Report Agent",   st.session_state["agent_report"]   or bool(fs.get("pdf_path"))),
+    ]
+    for label, done in agent_states:
         rc = "done" if done else "pending"
         st.markdown(f"""<div class="step-row {rc}">
             <div class="step-dot {rc}"></div>
@@ -268,15 +308,21 @@ with st.sidebar:
     if st.session_state["history"]:
         st.markdown("**최근 분석 기업**")
         for name in reversed(st.session_state["history"]):
-            st.markdown(f'<div class="history-item">{name}</div>', unsafe_allow_html=True)
+            if st.button(name, key=f"hist_{name}", use_container_width=True):
+                st.session_state["selected_company"] = name
         st.divider()
 
-    st.markdown('<span class="tag-green">● DART API 연동</span>', unsafe_allow_html=True)
+    data_source = st.session_state.get("final_state", {}).get("data_source")
+    if data_source:
+        label = "캐시" if data_source == "cache" else "DART"
+        st.markdown(f'<span class="tag-green">● 데이터 소스: {label}</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span class="tag-green">● DART API 연동</span>', unsafe_allow_html=True)
 
 # 히어로 배너
 st.markdown("""
 <div class="hero-banner fade-in">
-    <div class="hero-badge">SDIC AI Team 2 · 3주차</div>
+    <div class="hero-badge">SDIC AI Team 2 · 4주차</div>
     <div class="hero-title">AI <span>재무 컨설팅</span><br>대시보드</div>
     <div class="hero-sub">기업명을 입력하면 DART 실데이터 기반 재무 분석과 Claude AI 인사이트를 제공합니다.</div>
 </div>
@@ -285,14 +331,16 @@ st.markdown("""
 # 입력 영역
 col1, col2 = st.columns([5, 1])
 with col1:
-    company = st.text_input("기업명", placeholder="기업명을 입력하세요  ↩", label_visibility="collapsed")
+    default_company = st.session_state.pop("selected_company", "")
+    company = st.text_input("기업명", value=default_company, placeholder="기업명을 입력하세요  ↩", label_visibility="collapsed")
 with col2:
     analyze_btn = st.button("분석 시작", type="primary", use_container_width=True)
 
-if analyze_btn:
+if analyze_btn or default_company:
     if not company:
         st.error("기업명을 입력해주세요.")
     else:
+        st.session_state.pop("final_state", None)
         st.session_state["agent_data"] = False
         st.session_state["agent_analysis"] = False
         st.session_state["agent_report"] = False
@@ -333,13 +381,12 @@ if analyze_btn:
 
         render_progress(3)
 
+        # 결과를 session_state에 저장 → PDF 다운로드 후 re-run에서도 화면 유지
+        st.session_state["final_state"]    = graph_state
+        st.session_state["company"]        = company
         st.session_state["agent_data"]     = True
         st.session_state["agent_analysis"] = bool(graph_state.get("analysis"))
         st.session_state["agent_report"]   = bool(graph_state.get("pdf_path"))
-
-        # 결과를 session_state에 저장 → PDF 다운로드 후 re-run에서도 화면 유지
-        st.session_state["final_state"] = graph_state
-        st.session_state["company"]     = company
 
         if company not in st.session_state["history"]:
             st.session_state["history"].append(company)
@@ -396,7 +443,7 @@ if "final_state" in st.session_state:
                 return f'{val/10000:.1f} 조원'
             return f'{val:,} 억원'
 
-        tab1, tab2 = st.tabs(["재무 데이터", "Claude 분석"])
+        tab1, tab2, tab3 = st.tabs(["재무 데이터", "Claude 분석", "AI와 대화하기"])
 
         with tab1:
             # KPI 카드 4장
@@ -459,13 +506,78 @@ if "final_state" in st.session_state:
                 yoy[col + " YoY"] = df[col].pct_change().apply(
                     lambda x: f"{x*100:+.1f}%" if pd.notna(x) else "—"
                 )
-            st.dataframe(yoy.set_index("연도"), use_container_width=True)
+            st.dataframe(yoy[yoy["연도"] != sorted_items[0][0]].set_index("연도"), use_container_width=True)
 
         with tab2:
             if analysis:
                 st.markdown(f'<div class="analysis-card fade-in">{analysis}</div>', unsafe_allow_html=True)
             else:
                 st.info("분석 결과가 없습니다.")
+
+        with tab3:
+            st.markdown('<div class="section-header">AI 질문</div>', unsafe_allow_html=True)
+
+            TEXT2SQL_KEYWORDS = {"평균", "합계", "최대", "최소", "몇", "총", "얼마", "비교", "순위", "합산"}
+
+            def auto_route(question: str) -> str:
+                if any(kw in question for kw in TEXT2SQL_KEYWORDS):
+                    return "Text2SQL"
+                return "RAG"
+
+            mode = st.radio(
+                "모드 선택",
+                ["자동", "RAG", "Text2SQL"],
+                horizontal=True,
+                label_visibility="collapsed",
+            )
+            mode_desc = {
+                "자동": "질문 내용에 따라 자동으로 검색 방식을 선택합니다. 수치·계산 관련 질문(평균, 합계, 최대 등)은 Text2SQL로, 나머지는 RAG로 연결됩니다.",
+                "RAG": "보고서·텍스트 기반으로 유사한 내용을 찾아 Claude가 답변합니다. '왜', '어떻게', '전망' 같은 질적 질문에 적합합니다.",
+                "Text2SQL": "숫자·통계 질문을 SQL로 변환해 데이터베이스에서 직접 조회합니다. '평균 매출은?', '최대 영업이익 연도는?' 같은 질문에 적합합니다.",
+            }
+            st.caption(mode_desc[mode])
+
+            q_col, btn_col = st.columns([5, 1])
+            with q_col:
+                question = st.text_input("질문", placeholder="예: 2023년 영업이익이 왜 떨어졌나요?", label_visibility="collapsed")
+            with btn_col:
+                ask_btn = st.button("질문하기", type="primary", use_container_width=True)
+
+            if ask_btn:
+                if not question:
+                    st.error("질문을 입력해주세요.")
+                else:
+                    actual_mode = auto_route(question) if mode == "자동" else mode
+                    st.caption(f"모드: **{actual_mode}**{'  *(자동 선택)*' if mode == '자동' else ''}")
+
+                    if actual_mode == "RAG":
+                        if RAG_AVAILABLE:
+                            with st.spinner("RAG 검색 중..."):
+                                hits = rag_search(question, top_k=3)
+                                answer = rag_answer(question, hits)
+                            st.markdown('<div class="section-header">검색 결과 (상위 3개)</div>', unsafe_allow_html=True)
+                            for i, hit in enumerate(hits, 1):
+                                with st.expander(f"{i}위 — 유사도 {hit['score']:.3f}"):
+                                    st.write(hit["text"])
+                            st.markdown('<div class="section-header">Claude 답변</div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="analysis-card fade-in">{answer}</div>', unsafe_allow_html=True)
+                        else:
+                            st.markdown("""<div style="background:rgba(45,106,79,0.07);border-radius:14px;padding:1rem 1.2rem;border:1.5px solid #c8e6c9;color:#2d6a4f;font-size:0.88rem;">
+                            RAG 모듈 연결 준비 중입니다. 팀원 작업 완료 후 자동으로 활성화됩니다.
+                            </div>""", unsafe_allow_html=True)
+
+                    else:
+                        if TEXT2SQL_AVAILABLE:
+                            with st.spinner("SQL 생성 중..."):
+                                result = text2sql_query(question)
+                            st.markdown('<div class="section-header">생성된 SQL</div>', unsafe_allow_html=True)
+                            st.code(result["sql"], language="sql")
+                            st.markdown('<div class="section-header">결과</div>', unsafe_allow_html=True)
+                            st.dataframe(result["df"], use_container_width=True)
+                        else:
+                            st.markdown("""<div style="background:rgba(45,106,79,0.07);border-radius:14px;padding:1rem 1.2rem;border:1.5px solid #c8e6c9;color:#2d6a4f;font-size:0.88rem;">
+                            Text2SQL 모듈 연결 준비 중입니다. 팀원 작업 완료 후 자동으로 활성화됩니다.
+                            </div>""", unsafe_allow_html=True)
 
         # PDF 다운로드 (탭 밖)
         if pdf_path and os.path.exists(pdf_path):
@@ -478,4 +590,4 @@ if "final_state" in st.session_state:
                     mime="application/pdf",
                 )
 
-        st.success(f"{company} 분석 완료!")
+        st.toast(f"{company} 분석 완료!", icon="✅")

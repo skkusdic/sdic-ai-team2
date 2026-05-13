@@ -5,3 +5,5 @@ dart-fss
 python-dotenv
 plotly
 fpdf2
+scikit-learn
+joblib
