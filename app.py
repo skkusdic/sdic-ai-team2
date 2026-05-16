@@ -344,6 +344,7 @@ if analyze_btn or default_company:
         st.session_state["agent_data"] = False
         st.session_state["agent_analysis"] = False
         st.session_state["agent_report"] = False
+        st.session_state["toast_shown"] = False
 
         progress_placeholder = st.empty()
         steps = ["Data Agent", "Analysis Agent", "Report Agent"]
@@ -510,7 +511,21 @@ if "final_state" in st.session_state:
 
         with tab2:
             if analysis:
-                st.markdown(f'<div class="analysis-card fade-in">{analysis}</div>', unsafe_allow_html=True)
+                import re
+
+                def format_analysis(text: str) -> str:
+                    # 숫자(콤마/소수점 포함, % 단위 포함) 볼드 처리
+                    text = re.sub(
+                        r'([\d,\.]+(?:%|억원|조원|원)?)',
+                        r'<strong>\1</strong>',
+                        text
+                    )
+                    # 문장 단위로 줄바꿈
+                    sentences = re.split(r'(?<=[다요])\. ', text)
+                    return '<br><br>'.join(s.strip() for s in sentences if s.strip())
+
+                formatted = format_analysis(analysis)
+                st.markdown(f'<div class="analysis-card fade-in">{formatted}</div>', unsafe_allow_html=True)
             else:
                 st.info("분석 결과가 없습니다.")
 
@@ -590,4 +605,6 @@ if "final_state" in st.session_state:
                     mime="application/pdf",
                 )
 
-        st.toast(f"{company} 분석 완료!", icon="✅")
+        if not st.session_state.get("toast_shown"):
+            st.toast(f"{company} 분석 완료!", icon="✅")
+            st.session_state["toast_shown"] = True
