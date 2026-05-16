@@ -34,27 +34,31 @@ def text_to_sql(question: str, corp_name: str, financials: dict) -> str:
 
 [테이블 스키마]
 CREATE TABLE financials (
+    company TEXT,
     year INTEGER,
-    revenue INTEGER,
-    operating_profit INTEGER,
-    net_income INTEGER
+    매출액 INTEGER,
+    영업이익 INTEGER,
+    순이익 INTEGER
 );
+
+[중요: 반드시 company 필터 적용]
+모든 쿼리는 WHERE company='{corp_name}' 조건을 포함해야 합니다.
 
 [변환 예시]
 질문: "2024년 매출액은?"
-SQL: SELECT revenue FROM financials WHERE year=2024
+SQL: SELECT 매출액 FROM financials WHERE company='{corp_name}' AND year=2024
 
 질문: "5년 순이익 합은?"
-SQL: SELECT SUM(net_income) FROM financials WHERE year>={min_year} AND year<={max_year}
+SQL: SELECT SUM(순이익) FROM financials WHERE company='{corp_name}' AND year>={min_year} AND year<={max_year}
 
 질문: "평균 영업이익은?"
-SQL: SELECT AVG(operating_profit) FROM financials WHERE year BETWEEN {min_year} AND {max_year}
+SQL: SELECT AVG(영업이익) FROM financials WHERE company='{corp_name}' AND year BETWEEN {min_year} AND {max_year}
 
 질문: "최고 매출액은?"
-SQL: SELECT MAX(revenue) FROM financials WHERE year BETWEEN {min_year} AND {max_year}
+SQL: SELECT MAX(매출액) FROM financials WHERE company='{corp_name}' AND year BETWEEN {min_year} AND {max_year}
 
 질문: "최저 영업이익은?"
-SQL: SELECT MIN(operating_profit) FROM financials WHERE year BETWEEN {min_year} AND {max_year}
+SQL: SELECT MIN(영업이익) FROM financials WHERE company='{corp_name}' AND year BETWEEN {min_year} AND {max_year}
 
 [사용자 질문]
 {question}
@@ -166,31 +170,55 @@ def text2sql_agent(state: dict) -> dict:
     return {**state, "sql_result": result}
 
 
+def query(question: str, company: str, financials: dict, db) -> dict:
+    """App에서 호출하는 public API.
+
+    Args:
+        question: 사용자의 한국어 질문
+        company: 분석 대상 회사명
+        financials: {year: {...}, ...} 형태의 재무 데이터
+        db: 데이터베이스 객체
+
+    Returns:
+        {"success": bool, "error_type": str, "result": ..., "message": str, "sql": str}
+    """
+    state = {
+        "question": question,
+        "company": company,
+        "financials": financials,
+        "db": db
+    }
+    result_state = text2sql_agent(state)
+    return result_state["sql_result"]
+
+
 if __name__ == "__main__":
     # SQLite 기반 테스트 데이터베이스
     class SQLiteTestDB:
         """SQLite 기반 테스트용 데이터베이스."""
 
-        def __init__(self, financials: dict):
+        def __init__(self, company: str, financials: dict):
             self.conn = sqlite3.connect(":memory:")
             self.cursor = self.conn.cursor()
 
-            # 테이블 생성
+            # 테이블 생성 (실제 db.py 스키마와 동일)
             self.cursor.execute("""
                 CREATE TABLE financials (
-                    year INTEGER PRIMARY KEY,
-                    revenue REAL,
-                    operating_profit REAL,
-                    net_income REAL
+                    company TEXT,
+                    year INTEGER,
+                    매출액 REAL,
+                    영업이익 REAL,
+                    순이익 REAL,
+                    PRIMARY KEY (company, year)
                 )
             """)
 
             # 데이터 삽입
             for year, data in financials.items():
                 self.cursor.execute("""
-                    INSERT INTO financials (year, revenue, operating_profit, net_income)
-                    VALUES (?, ?, ?, ?)
-                """, (year, data["revenue"], data["operating_profit"], data["net_income"]))
+                    INSERT INTO financials (company, year, 매출액, 영업이익, 순이익)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (company, year, data["매출액"], data["영업이익"], data["순이익"]))
 
             self.conn.commit()
 
@@ -199,16 +227,17 @@ if __name__ == "__main__":
             result = self.cursor.execute(sql).fetchone()
             return result[0] if result else None
 
-    # Mock financials 데이터 (삼성전자 5개년: 2020~2024)
+    # Mock financials 데이터 (삼성전자 5개년: 2020~2024, 실제 스키마와 동일)
     mock_financials = {
-        2020: {"revenue": 236.8, "operating_profit": 32.7, "net_income": 40.2},
-        2021: {"revenue": 279.6, "operating_profit": 47.9, "net_income": 55.3},
-        2022: {"revenue": 371.5, "operating_profit": 50.6, "net_income": 59.4},
-        2023: {"revenue": 365.4, "operating_profit": 47.1, "net_income": 52.1},
-        2024: {"revenue": 380.7, "operating_profit": 51.2, "net_income": 58.8},
+        2020: {"매출액": 236.8, "영업이익": 32.7, "순이익": 40.2},
+        2021: {"매출액": 279.6, "영업이익": 47.9, "순이익": 55.3},
+        2022: {"매출액": 371.5, "영업이익": 50.6, "순이익": 59.4},
+        2023: {"매출액": 365.4, "영업이익": 47.1, "순이익": 52.1},
+        2024: {"매출액": 380.7, "영업이익": 51.2, "순이익": 58.8},
     }
 
-    mock_db = SQLiteTestDB(mock_financials)
+    company = "삼성전자"
+    mock_db = SQLiteTestDB(company, mock_financials)
 
     # 테스트 질문들
     test_questions = [
@@ -227,42 +256,26 @@ if __name__ == "__main__":
         print(f"\n[테스트 {i}] {question}")
         print("-" * 80)
 
-        state = {
-            "question": question,
-            "company": "삼성전자",
-            "financials": mock_financials,
-            "db": mock_db
-        }
+        result = query(question, company, mock_financials, mock_db)
 
-        result_state = text2sql_agent(state)
-        sql_result = result_state["sql_result"]
+        print(f"Success: {result['success']}")
+        print(f"Error Type: {result['error_type']}")
+        print(f"SQL: {result['sql']}")
 
-        print(f"Success: {sql_result['success']}")
-        print(f"Error Type: {sql_result['error_type']}")
-        print(f"SQL: {sql_result['sql']}")
-
-        if sql_result['success']:
-            print(f"Result: {sql_result['result']}")
+        if result['success']:
+            print(f"Result: {result['result']}")
         else:
-            print(f"Message: {sql_result['message']}")
+            print(f"Message: {result['message']}")
 
     # INSERT 문 테스트 (변환 실패 확인)
     print(f"\n[추가 테스트] INSERT 방어 테스트")
     print("-" * 80)
 
-    state = {
-        "question": "데이터 삽입해줘",
-        "company": "삼성전자",
-        "financials": mock_financials,
-        "db": mock_db
-    }
+    result = query("데이터 삽입해줘", company, mock_financials, mock_db)
 
-    result_state = text2sql_agent(state)
-    sql_result = result_state["sql_result"]
-
-    print(f"Success: {sql_result['success']}")
-    print(f"Error Type: {sql_result['error_type']}")
-    print(f"Message: {sql_result['message']}")
+    print(f"Success: {result['success']}")
+    print(f"Error Type: {result['error_type']}")
+    print(f"Message: {result['message']}")
 
     print("\n" + "=" * 80)
     print("테스트 완료")
