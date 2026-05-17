@@ -14,7 +14,7 @@ except Exception:
 from graph import build_graph
 
 try:
-    from rag import search as rag_search, answer as rag_answer
+    from rag import build_index as rag_build_index, search as rag_search, answer as rag_answer
     RAG_AVAILABLE = True
 except ImportError:
     RAG_AVAILABLE = False
@@ -568,12 +568,13 @@ if "final_state" in st.session_state:
                     if actual_mode == "RAG":
                         if RAG_AVAILABLE:
                             with st.spinner("RAG 검색 중..."):
-                                hits = rag_search(question, top_k=3)
+                                chunks, vectorizer, tfidf_matrix = rag_build_index(company)
+                                hits = rag_search(question, chunks, vectorizer, tfidf_matrix)
                                 answer = rag_answer(question, hits)
                             st.markdown('<div class="section-header">검색 결과 (상위 3개)</div>', unsafe_allow_html=True)
-                            for i, hit in enumerate(hits, 1):
-                                with st.expander(f"{i}위 — 유사도 {hit['score']:.3f}"):
-                                    st.write(hit["text"])
+                            for i, (score, text) in enumerate(hits, 1):
+                                with st.expander(f"{i}위 — 유사도 {score:.3f}"):
+                                    st.write(text)
                             st.markdown('<div class="section-header">Claude 답변</div>', unsafe_allow_html=True)
                             st.markdown(f'<div class="analysis-card fade-in">{answer}</div>', unsafe_allow_html=True)
                         else:
