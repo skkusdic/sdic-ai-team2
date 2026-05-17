@@ -21,6 +21,9 @@ except ImportError:
 
 try:
     from text2sql import query as text2sql_query
+    from db import execute_sql as _db_execute_sql
+    class _DbWrapper:
+        def execute_sql(self, sql): return _db_execute_sql(sql)
     TEXT2SQL_AVAILABLE = True
 except ImportError:
     TEXT2SQL_AVAILABLE = False
@@ -558,42 +561,61 @@ if "final_state" in st.session_state:
             with btn_col:
                 ask_btn = st.button("질문하기", type="primary", use_container_width=True)
 
+            def render_ai_answer():
+                res = st.session_state.get("ai_result")
+                if not res:
+                    return
+                actual_mode = res["mode"]
+                st.caption(f"모드: **{actual_mode}**{'  *(자동 선택)*' if res['auto'] else ''}")
+                if actual_mode == "RAG":
+                    st.markdown('<div class="section-header">Claude 답변</div>', unsafe_allow_html=True)
+                    raw = res["answer"]
+                    clean = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', raw)
+                    if "결론:" in clean:
+                        body, conclusion = clean.split("결론:", 1)
+                        st.markdown(f'<div class="analysis-card fade-in">{body}</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div style="background:rgba(45,106,79,0.13);border-left:4px solid #40916c;border-radius:12px;padding:1rem 1.3rem;margin-top:1rem;"><span style="font-size:1.08rem;font-weight:800;color:#1b4332;">결론</span><span style="font-size:1.05rem;font-weight:700;color:#1b4332;">{conclusion}</span></div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div class="analysis-card fade-in">{clean}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div class="section-header">Claude 답변</div>', unsafe_allow_html=True)
+                    if res.get("success") and res.get("rows"):
+                        rows_text = str(res["rows"])
+                        from claude_client import ask as _claude_ask
+                        interp = _claude_ask(f"질문: {res.get('question','')}\nSQL: {res['sql']}\n결과: {rows_text}\n\n위 결과를 한국어로 간결하게 1~2문장으로 해석해줘. 숫자는 억원 단위로 표시.", max_tokens=200)
+                        clean_interp = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', interp)
+                        st.markdown(f'<div class="analysis-card fade-in">{clean_interp}</div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div class="analysis-card fade-in">{res.get("message", "결과가 없습니다.")}</div>', unsafe_allow_html=True)
+
             if ask_btn:
                 if not question:
                     st.error("질문을 입력해주세요.")
                 else:
                     actual_mode = auto_route(question) if mode == "자동" else mode
-                    st.caption(f"모드: **{actual_mode}**{'  *(자동 선택)*' if mode == '자동' else ''}")
-
                     if actual_mode == "RAG":
                         if RAG_AVAILABLE:
                             with st.spinner("RAG 검색 중..."):
                                 chunks, vectorizer, tfidf_matrix = rag_build_index(company)
                                 hits = rag_search(question, chunks, vectorizer, tfidf_matrix)
-                                answer = rag_answer(question, hits)
-                            st.markdown('<div class="section-header">검색 결과 (상위 3개)</div>', unsafe_allow_html=True)
-                            for i, (score, text) in enumerate(hits, 1):
-                                with st.expander(f"{i}위 — 유사도 {score:.3f}"):
-                                    st.write(text)
-                            st.markdown('<div class="section-header">Claude 답변</div>', unsafe_allow_html=True)
-                            st.markdown(f'<div class="analysis-card fade-in">{answer}</div>', unsafe_allow_html=True)
+                                ans = rag_answer(question, hits)
+                            st.session_state["ai_result"] = {"mode": "RAG", "auto": mode == "자동", "answer": ans}
                         else:
                             st.markdown("""<div style="background:rgba(45,106,79,0.07);border-radius:14px;padding:1rem 1.2rem;border:1.5px solid #c8e6c9;color:#2d6a4f;font-size:0.88rem;">
                             RAG 모듈 연결 준비 중입니다. 팀원 작업 완료 후 자동으로 활성화됩니다.
                             </div>""", unsafe_allow_html=True)
-
                     else:
                         if TEXT2SQL_AVAILABLE:
                             with st.spinner("SQL 생성 중..."):
-                                result = text2sql_query(question)
-                            st.markdown('<div class="section-header">생성된 SQL</div>', unsafe_allow_html=True)
-                            st.code(result["sql"], language="sql")
-                            st.markdown('<div class="section-header">결과</div>', unsafe_allow_html=True)
-                            st.dataframe(result["df"], use_container_width=True)
+                                _fin = {int(k): v for k, v in final_state.get("financials", {}).items()}
+                                result = text2sql_query(question, company, _fin, _DbWrapper())
+                            st.session_state["ai_result"] = {"mode": "Text2SQL", "auto": mode == "자동", "question": question, "sql": result.get("sql", ""), "rows": result.get("result"), "success": result.get("success", False), "message": result.get("message", "")}
                         else:
                             st.markdown("""<div style="background:rgba(45,106,79,0.07);border-radius:14px;padding:1rem 1.2rem;border:1.5px solid #c8e6c9;color:#2d6a4f;font-size:0.88rem;">
                             Text2SQL 모듈 연결 준비 중입니다. 팀원 작업 완료 후 자동으로 활성화됩니다.
                             </div>""", unsafe_allow_html=True)
+
+            render_ai_answer()
 
         # PDF 다운로드 (탭 밖)
         if pdf_path and os.path.exists(pdf_path):
