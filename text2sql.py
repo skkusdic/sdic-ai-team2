@@ -211,6 +211,10 @@ def query(question: str, company: str) -> dict:
             rows = cursor.fetchall()
             col_names = [desc[0] for desc in cursor.description] if cursor.description else []
         df = pd.DataFrame(rows, columns=col_names) if rows else pd.DataFrame(columns=col_names)
+        # 수치 컬럼에 억원 단위 포맷 적용
+        amount_cols = [c for c in df.columns if any(k in c for k in ("매출액", "영업이익", "순이익", "AVG", "SUM", "MAX", "MIN"))]
+        for col in amount_cols:
+            df[col] = df[col].apply(lambda v: f"{int(round(v)):,} 억원" if pd.notna(v) else "-")
         return {"sql": sql, "df": df, "success": True, "message": None}
     except Exception as e:
         return {"sql": sql, "df": pd.DataFrame(), "success": False, "message": f"SQL 실행 실패: {e}"}
