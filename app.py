@@ -554,7 +554,7 @@ if "final_state" in st.session_state:
                         if RAG_AVAILABLE:
                             with st.spinner("RAG 검색 중..."):
                                 hits = rag_search(company, question, top_k=3)
-                                answer = rag_answer(question, hits)
+                                answer = rag_answer(question, [(h["score"], h["text"]) for h in hits])
                             st.markdown('<div class="section-header">검색 결과 (상위 3개)</div>', unsafe_allow_html=True)
                             for i, hit in enumerate(hits, 1):
                                 with st.expander(f"{i}위 — 유사도 {hit['score']:.3f}"):
