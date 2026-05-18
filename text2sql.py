@@ -7,7 +7,9 @@ import sqlite3
 import pandas as pd
 
 from claude_client import ask
-import db as _db
+from data import _load_from_db as _load_financials
+
+_FINANCIALS_DB = "financials.db"
 
 
 def text_to_sql(question: str, corp_name: str, financials: dict) -> str:
@@ -21,7 +23,7 @@ def text_to_sql(question: str, corp_name: str, financials: dict) -> str:
     Returns:
         ```sql로 감싼 SQL SELECT문
     """
-    data_years = sorted(financials.keys())
+    data_years = sorted(int(y) for y in financials.keys())
     min_year = data_years[0]
     max_year = data_years[-1]
 
@@ -180,7 +182,7 @@ def query(question: str, company: str) -> dict:
     Returns:
         {"sql": str, "df": pd.DataFrame, "success": bool, "message": str | None}
     """
-    financials = _db.load_financials(company)
+    financials = _load_financials(company)
     if not financials:
         return {
             "sql": "",
@@ -197,15 +199,14 @@ def query(question: str, company: str) -> dict:
     if "SELECT" not in sql.upper() or "FROM" not in sql.upper():
         return {"sql": sql, "df": pd.DataFrame(), "success": False, "message": "SQL 변환에 실패했습니다."}
 
-    # 3) db.py의 안전 실행 게이트로 실행 (company 필터 자동 삽입)
-    # db.execute_sql은 data/sdic.db를 바라보므로 company 조건이 SQL에 없으면 추가
+    # 3) company 필터 자동 삽입
     if "company" not in sql.lower() and "WHERE" not in sql.upper():
         sql = sql + f" WHERE company = '{company}'"
     elif "company" not in sql.lower():
         sql = sql + f" AND company = '{company}'"
 
     try:
-        with sqlite3.connect(_db.DB_PATH) as conn:
+        with sqlite3.connect(_FINANCIALS_DB) as conn:
             cursor = conn.execute(sql)
             rows = cursor.fetchall()
             col_names = [desc[0] for desc in cursor.description] if cursor.description else []
