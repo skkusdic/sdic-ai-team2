@@ -35,6 +35,17 @@ _CORP_ALIASES = {
     "기아차": "기아",
     "포스코": "POSCO홀딩스",
     "비비큐": "BBQ",
+    # 영어 → 한글
+    "samsung": "삼성전자",
+    "hyundai": "현대자동차",
+    "kia": "기아",
+    "kakao": "카카오",
+    "lg": "LG전자",
+    "sk": "SK하이닉스",
+    "posco": "POSCO홀딩스",
+    "lotte": "롯데쇼핑",
+    "hanwha": "한화",
+    "celltrion": "셀트리온",
 }
 
 
@@ -78,20 +89,26 @@ def _find_corp_code(company_name: str) -> str:
     corp_map = _get_corp_map()
     raw = company_name.strip()
     no_space = raw.replace(" ", "")
+    lower = no_space.lower()
 
     candidates = [raw, no_space]
-    if no_space in _CORP_ALIASES:
+    # 소문자 alias 매핑 (영어 입력 → 한글 회사명)
+    if lower in _CORP_ALIASES:
+        candidates.append(_CORP_ALIASES[lower])
+    elif no_space in _CORP_ALIASES:
         candidates.append(_CORP_ALIASES[no_space])
 
-    # 정확히 일치 (상장사 우선)
+    # 정확히 일치 (대소문자 무시 포함)
+    corp_map_lower = {k.lower(): v for k, v in corp_map.items()}
     for cand in candidates:
         if cand in corp_map:
-            code, stock = corp_map[cand]
-            return code
+            return corp_map[cand][0]
+        if cand.lower() in corp_map_lower:
+            return corp_map_lower[cand.lower()][0]
 
     # 부분 일치 (짧은 이름 우선)
     for cand in candidates:
-        matches = [(name, code, stock) for name, (code, stock) in corp_map.items() if cand in name]
+        matches = [(name, code, stock) for name, (code, stock) in corp_map.items() if cand.lower() in name.lower()]
         listed = [(n, c, s) for n, c, s in matches if s]
         pool = listed if listed else matches
         if pool:
