@@ -162,17 +162,17 @@ def _load_from_db(company_name: str) -> dict:
     with sqlite3.connect(DB_PATH) as conn:
         _init_db(conn)
         rows = conn.execute(
-            "SELECT year, 매출액, 영업이익, 순이익 FROM financials WHERE company = ? ORDER BY year",
+            "SELECT year, 매출액, 영업이익, 순이익 FROM financials WHERE company = ? ORDER BY year DESC LIMIT 5",
             (company_name,),
         ).fetchall()
     return {
         str(year): {"매출액": rev, "영업이익": op, "순이익": net}
-        for year, rev, op, net in rows
+        for year, rev, op, net in sorted(rows)  # 오름차순 정렬
     }
 
 
 def get_financials(company_name: str) -> dict:
-    """6개년(2020~2025) 재무 데이터. 키는 문자열 연도('2020'~'2025'). 단위: 억원."""
+    """최신 연도 기준 최대 5개년 재무 데이터. 키는 문자열 연도. 단위: 억원."""
     cached = _load_from_db(company_name)
     if cached:
         return cached
@@ -183,7 +183,7 @@ def get_financials(company_name: str) -> dict:
 
     data = {str(year): metrics for year, metrics in raw.items()}
     _save_to_db(company_name, data)
-    return data
+    return _load_from_db(company_name)
 
 
 if __name__ == "__main__":
