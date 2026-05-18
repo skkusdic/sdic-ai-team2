@@ -7,20 +7,22 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Streamlit Cloud: st.secrets → os.environ 동기화
-try:
-    import streamlit as st
-    for _key in ["DART_API_KEY", "ANTHROPIC_API_KEY"]:
-        if _key in st.secrets and _key not in os.environ:
-            os.environ[_key] = st.secrets[_key]
-except Exception:
-    pass
-
 DB_PATH = "financials.db"
-DART_API_KEY = os.environ.get("DART_API_KEY", "")
 DART_ENDPOINT = "https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json"
 
-dart.set_api_key(DART_API_KEY)
+
+def _get_dart_api_key() -> str:
+    """DART API 키를 환경변수 또는 st.secrets에서 가져옴 (호출 시점에 읽어야 Cloud 호환)."""
+    key = os.environ.get("DART_API_KEY", "")
+    if not key:
+        try:
+            import streamlit as st
+            key = st.secrets.get("DART_API_KEY", "")
+            if key:
+                os.environ["DART_API_KEY"] = key
+        except Exception:
+            pass
+    return key
 
 _corp_list_cache = None
 
@@ -51,6 +53,7 @@ _CORP_ALIASES = {
 def _get_corp_list():
     global _corp_list_cache
     if _corp_list_cache is None:
+        dart.set_api_key(_get_dart_api_key())
         _corp_list_cache = dart.get_corp_list()
     return _corp_list_cache
 
@@ -87,7 +90,7 @@ def _find_corp_code(company_name: str) -> str:
 def _extract_year(corp_code: str, year: int, fs_div: str) -> dict:
     """fnlttSinglAcntAll API로 단년 손익 추출 (XBRL 우회). fs_div: 'CFS' 또는 'OFS'."""
     params = {
-        "crtfc_key": DART_API_KEY,
+        "crtfc_key": _get_dart_api_key(),
         "corp_code": corp_code,
         "bsns_year": str(year),
         "reprt_code": "11011",
