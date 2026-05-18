@@ -14,7 +14,7 @@ except Exception:
 from graph import build_graph
 
 try:
-    from rag import search as rag_search, answer as rag_answer
+    from rag import search_app as rag_search, answer as rag_answer
     RAG_AVAILABLE = True
 except ImportError:
     RAG_AVAILABLE = False
@@ -553,7 +553,7 @@ if "final_state" in st.session_state:
                     if actual_mode == "RAG":
                         if RAG_AVAILABLE:
                             with st.spinner("RAG 검색 중..."):
-                                hits = rag_search(question, top_k=3)
+                                hits = rag_search(company, question, top_k=3)
                                 answer = rag_answer(question, hits)
                             st.markdown('<div class="section-header">검색 결과 (상위 3개)</div>', unsafe_allow_html=True)
                             for i, hit in enumerate(hits, 1):

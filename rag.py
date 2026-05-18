@@ -130,6 +130,13 @@ def embed_text(text: str) -> list:
     pass  # TODO: 5주차에 OpenAI embeddings로 전환 예정
 
 
+def search_app(company: str, question: str, top_k: int = 3) -> list[dict]:
+    """app.py 호환 래퍼 — [{"score": float, "text": str}] 형태로 반환."""
+    chunks, vectorizer, tfidf_matrix = build_index(company)
+    retrieved = search(question, chunks, vectorizer, tfidf_matrix, k=top_k)
+    return [{"score": score, "text": chunk} for score, chunk in retrieved]
+
+
 def query_rag(company: str, query: str, k: int = 3) -> str:
     """company + query만 넘기면 검색·답변까지 한 번에 처리."""
     chunks, vectorizer, tfidf_matrix = build_index(company)
