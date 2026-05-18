@@ -1,36 +1,24 @@
+import io
 import os
 import sqlite3
+import zipfile
 import requests
+import xml.etree.ElementTree as ET
 
-import dart_fss as dart
 from dotenv import load_dotenv
 
 load_dotenv()
 
 DB_PATH = "financials.db"
 DART_ENDPOINT = "https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json"
+DART_CORPCODE_URL = "https://opendart.fss.or.kr/api/corpCode.xml"
 
-
-def _get_dart_api_key() -> str:
-    """DART API 키를 환경변수 또는 st.secrets에서 가져옴 (호출 시점에 읽어야 Cloud 호환)."""
-    key = os.environ.get("DART_API_KEY", "")
-    if not key:
-        try:
-            import streamlit as st
-            key = st.secrets.get("DART_API_KEY", "")
-            if key:
-                os.environ["DART_API_KEY"] = key
-        except Exception:
-            pass
-    return key
-
-_corp_list_cache = None
+_corp_map_cache = None  # {corp_name: (corp_code, stock_code), ...}
 
 _REVENUE_LABELS = {"매출액", "영업수익", "수익(매출액)"}
 _OPERATING_LABELS = {"영업이익", "영업이익(손실)", "영업손실"}
 _NET_LABELS = {"당기순이익", "당기순이익(손실)", "당기순손실"}
 
-# DART에 영문/약어로 등록된 회사 한글 별칭 매핑
 _CORP_ALIASES = {
     "네이버": "NAVER",
     "케이티": "KT",
@@ -50,39 +38,64 @@ _CORP_ALIASES = {
 }
 
 
-def _get_corp_list():
-    global _corp_list_cache
-    if _corp_list_cache is None:
-        dart.set_api_key(_get_dart_api_key())
-        _corp_list_cache = dart.get_corp_list()
-    return _corp_list_cache
+def _get_dart_api_key() -> str:
+    key = os.environ.get("DART_API_KEY", "")
+    if not key:
+        try:
+            import streamlit as st
+            key = st.secrets.get("DART_API_KEY", "")
+            if key:
+                os.environ["DART_API_KEY"] = key
+        except Exception:
+            pass
+    return key
+
+
+def _get_corp_map() -> dict:
+    """DART corpCode.xml API로 회사명 → (corp_code, stock_code) 맵 반환."""
+    global _corp_map_cache
+    if _corp_map_cache is not None:
+        return _corp_map_cache
+
+    resp = requests.get(DART_CORPCODE_URL, params={"crtfc_key": _get_dart_api_key()}, timeout=30)
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
+        xml_data = z.read("CORPCODE.xml")
+
+    root = ET.fromstring(xml_data)
+    corp_map = {}
+    for item in root.findall("list"):
+        name = (item.findtext("corp_name") or "").strip()
+        code = (item.findtext("corp_code") or "").strip()
+        stock = (item.findtext("stock_code") or "").strip()
+        if name and code:
+            corp_map[name] = (code, stock)
+
+    _corp_map_cache = corp_map
+    return corp_map
 
 
 def _find_corp_code(company_name: str) -> str:
-    corp_list = _get_corp_list()
+    corp_map = _get_corp_map()
     raw = company_name.strip()
     no_space = raw.replace(" ", "")
-    candidates = [raw]
-    if no_space != raw:
-        candidates.append(no_space)
-    # 한글 → DART 등록명 별칭 추가 (네이버 → NAVER 등)
+
+    candidates = [raw, no_space]
     if no_space in _CORP_ALIASES:
         candidates.append(_CORP_ALIASES[no_space])
 
+    # 정확히 일치 (상장사 우선)
     for cand in candidates:
-        results = corp_list.find_by_corp_name(cand, exactly=True) or []
-        listed = [r for r in results if r.stock_code]
-        if listed:
-            return listed[0].corp_code
-        if results:
-            return results[0].corp_code
+        if cand in corp_map:
+            code, stock = corp_map[cand]
+            return code
 
+    # 부분 일치 (짧은 이름 우선)
     for cand in candidates:
-        results = corp_list.find_by_corp_name(cand, exactly=False) or []
-        listed = [r for r in results if r.stock_code]
-        pool = listed if listed else results
+        matches = [(name, code, stock) for name, (code, stock) in corp_map.items() if cand in name]
+        listed = [(n, c, s) for n, c, s in matches if s]
+        pool = listed if listed else matches
         if pool:
-            return min(pool, key=lambda r: len(r.corp_name)).corp_code
+            return min(pool, key=lambda x: len(x[0]))[1]
 
     return ""
 
