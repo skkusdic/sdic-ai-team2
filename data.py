@@ -7,8 +7,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Streamlit Cloud: st.secrets → os.environ 동기화
+try:
+    import streamlit as st
+    for _key in ["DART_API_KEY", "ANTHROPIC_API_KEY"]:
+        if _key in st.secrets and _key not in os.environ:
+            os.environ[_key] = st.secrets[_key]
+except Exception:
+    pass
+
 DB_PATH = "financials.db"
-DART_API_KEY = os.environ["DART_API_KEY"]
+DART_API_KEY = os.environ.get("DART_API_KEY", "")
 DART_ENDPOINT = "https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json"
 
 dart.set_api_key(DART_API_KEY)
