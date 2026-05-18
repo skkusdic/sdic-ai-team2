@@ -2,17 +2,16 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from data import get_financials
-from db import load_financials, save_financials
+from data import get_financials, _load_from_db
 
 
 def run_data_agent(state: dict) -> dict:
     company = state["company"]
 
-    # 캐시 먼저 조회
-    cached = load_financials(company)
+    # 캐시 먼저 조회 (data.py의 financials.db 기준)
+    cached = _load_from_db(company)
     if cached:
-        print(f"[Data Agent] {company} — 캐시 hit (SQLite)")
+        print(f"[Data Agent] {company} — 캐시 hit (SQLite), {len(cached)}개년")
         return {
             **state,
             "financials": cached,
@@ -20,12 +19,9 @@ def run_data_agent(state: dict) -> dict:
             "next_agent": "analysis_agent",
         }
 
-    # 캐시 miss → DART 호출 후 저장
+    # 캐시 miss → DART 호출 및 저장 (get_financials 내부에서 처리)
     print(f"[Data Agent] {company} — 캐시 miss, DART 호출 중...")
     financials = get_financials(company)
-    if financials:
-        save_financials(company, financials)
-        print(f"[Data Agent] {company} — DART 데이터 저장 완료")
 
     return {
         **state,
