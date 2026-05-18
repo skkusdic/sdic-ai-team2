@@ -4,7 +4,10 @@ import sys
 from pathlib import Path
 import sqlite3
 
+import pandas as pd
+
 from claude_client import ask
+import db as _db
 
 
 def text_to_sql(question: str, corp_name: str, financials: dict) -> str:
@@ -34,19 +37,16 @@ def text_to_sql(question: str, corp_name: str, financials: dict) -> str:
 
 [테이블 스키마]
 CREATE TABLE financials (
-    company TEXT,
-    year INTEGER,
-    매출액 INTEGER,
+    company  TEXT,
+    year     INTEGER,
+    매출액   INTEGER,
     영업이익 INTEGER,
-    순이익 INTEGER
+    순이익   INTEGER
 );
-
-[중요: 반드시 company 필터 적용]
-모든 쿼리는 WHERE company='{corp_name}' 조건을 포함해야 합니다.
 
 [변환 예시]
 질문: "2024년 매출액은?"
-SQL: SELECT 매출액 FROM financials WHERE company='{corp_name}' AND year=2024
+SQL: SELECT year, 매출액 FROM financials WHERE company='{corp_name}' AND year=2024
 
 질문: "5년 순이익 합은?"
 SQL: SELECT SUM(순이익) FROM financials WHERE company='{corp_name}' AND year>={min_year} AND year<={max_year}
@@ -170,26 +170,49 @@ def text2sql_agent(state: dict) -> dict:
     return {**state, "sql_result": result}
 
 
-def query(question: str, company: str, financials: dict, db) -> dict:
-    """App에서 호출하는 public API.
+def query(question: str, company: str) -> dict:
+    """app.py에서 호출하는 단순 인터페이스.
 
     Args:
         question: 사용자의 한국어 질문
-        company: 분석 대상 회사명
-        financials: {year: {...}, ...} 형태의 재무 데이터
-        db: 데이터베이스 객체
+        company: 분석 대상 회사명 (session_state에서 전달)
 
     Returns:
-        {"success": bool, "error_type": str, "result": ..., "message": str, "sql": str}
+        {"sql": str, "df": pd.DataFrame, "success": bool, "message": str | None}
     """
-    state = {
-        "question": question,
-        "company": company,
-        "financials": financials,
-        "db": db
-    }
-    result_state = text2sql_agent(state)
-    return result_state["sql_result"]
+    financials = _db.load_financials(company)
+    if not financials:
+        return {
+            "sql": "",
+            "df": pd.DataFrame(),
+            "success": False,
+            "message": f"'{company}' 재무 데이터가 없습니다. 먼저 분석을 실행해주세요.",
+        }
+
+    # 1) SQL 생성
+    sql_response = text_to_sql(question, company, financials)
+    sql = clean_sql(sql_response)
+
+    # 2) SQL 유효성 검사
+    if "SELECT" not in sql.upper() or "FROM" not in sql.upper():
+        return {"sql": sql, "df": pd.DataFrame(), "success": False, "message": "SQL 변환에 실패했습니다."}
+
+    # 3) db.py의 안전 실행 게이트로 실행 (company 필터 자동 삽입)
+    # db.execute_sql은 data/sdic.db를 바라보므로 company 조건이 SQL에 없으면 추가
+    if "company" not in sql.lower() and "WHERE" not in sql.upper():
+        sql = sql + f" WHERE company = '{company}'"
+    elif "company" not in sql.lower():
+        sql = sql + f" AND company = '{company}'"
+
+    try:
+        with sqlite3.connect(_db.DB_PATH) as conn:
+            cursor = conn.execute(sql)
+            rows = cursor.fetchall()
+            col_names = [desc[0] for desc in cursor.description] if cursor.description else []
+        df = pd.DataFrame(rows, columns=col_names) if rows else pd.DataFrame(columns=col_names)
+        return {"sql": sql, "df": df, "success": True, "message": None}
+    except Exception as e:
+        return {"sql": sql, "df": pd.DataFrame(), "success": False, "message": f"SQL 실행 실패: {e}"}
 
 
 if __name__ == "__main__":
@@ -197,28 +220,26 @@ if __name__ == "__main__":
     class SQLiteTestDB:
         """SQLite 기반 테스트용 데이터베이스."""
 
-        def __init__(self, company: str, financials: dict):
+        def __init__(self, financials: dict):
             self.conn = sqlite3.connect(":memory:")
             self.cursor = self.conn.cursor()
 
-            # 테이블 생성 (실제 db.py 스키마와 동일)
+            # 테이블 생성
             self.cursor.execute("""
                 CREATE TABLE financials (
-                    company TEXT,
-                    year INTEGER,
-                    매출액 REAL,
-                    영업이익 REAL,
-                    순이익 REAL,
-                    PRIMARY KEY (company, year)
+                    year INTEGER PRIMARY KEY,
+                    revenue REAL,
+                    operating_profit REAL,
+                    net_income REAL
                 )
             """)
 
             # 데이터 삽입
             for year, data in financials.items():
                 self.cursor.execute("""
-                    INSERT INTO financials (company, year, 매출액, 영업이익, 순이익)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (company, year, data["매출액"], data["영업이익"], data["순이익"]))
+                    INSERT INTO financials (year, revenue, operating_profit, net_income)
+                    VALUES (?, ?, ?, ?)
+                """, (year, data["revenue"], data["operating_profit"], data["net_income"]))
 
             self.conn.commit()
 
@@ -227,17 +248,16 @@ if __name__ == "__main__":
             result = self.cursor.execute(sql).fetchone()
             return result[0] if result else None
 
-    # Mock financials 데이터 (삼성전자 5개년: 2020~2024, 실제 스키마와 동일)
+    # Mock financials 데이터 (삼성전자 5개년: 2020~2024)
     mock_financials = {
-        2020: {"매출액": 236.8, "영업이익": 32.7, "순이익": 40.2},
-        2021: {"매출액": 279.6, "영업이익": 47.9, "순이익": 55.3},
-        2022: {"매출액": 371.5, "영업이익": 50.6, "순이익": 59.4},
-        2023: {"매출액": 365.4, "영업이익": 47.1, "순이익": 52.1},
-        2024: {"매출액": 380.7, "영업이익": 51.2, "순이익": 58.8},
+        2020: {"revenue": 236.8, "operating_profit": 32.7, "net_income": 40.2},
+        2021: {"revenue": 279.6, "operating_profit": 47.9, "net_income": 55.3},
+        2022: {"revenue": 371.5, "operating_profit": 50.6, "net_income": 59.4},
+        2023: {"revenue": 365.4, "operating_profit": 47.1, "net_income": 52.1},
+        2024: {"revenue": 380.7, "operating_profit": 51.2, "net_income": 58.8},
     }
 
-    company = "삼성전자"
-    mock_db = SQLiteTestDB(company, mock_financials)
+    mock_db = SQLiteTestDB(mock_financials)
 
     # 테스트 질문들
     test_questions = [
@@ -256,26 +276,42 @@ if __name__ == "__main__":
         print(f"\n[테스트 {i}] {question}")
         print("-" * 80)
 
-        result = query(question, company, mock_financials, mock_db)
+        state = {
+            "question": question,
+            "company": "삼성전자",
+            "financials": mock_financials,
+            "db": mock_db
+        }
 
-        print(f"Success: {result['success']}")
-        print(f"Error Type: {result['error_type']}")
-        print(f"SQL: {result['sql']}")
+        result_state = text2sql_agent(state)
+        sql_result = result_state["sql_result"]
 
-        if result['success']:
-            print(f"Result: {result['result']}")
+        print(f"Success: {sql_result['success']}")
+        print(f"Error Type: {sql_result['error_type']}")
+        print(f"SQL: {sql_result['sql']}")
+
+        if sql_result['success']:
+            print(f"Result: {sql_result['result']}")
         else:
-            print(f"Message: {result['message']}")
+            print(f"Message: {sql_result['message']}")
 
     # INSERT 문 테스트 (변환 실패 확인)
     print(f"\n[추가 테스트] INSERT 방어 테스트")
     print("-" * 80)
 
-    result = query("데이터 삽입해줘", company, mock_financials, mock_db)
+    state = {
+        "question": "데이터 삽입해줘",
+        "company": "삼성전자",
+        "financials": mock_financials,
+        "db": mock_db
+    }
 
-    print(f"Success: {result['success']}")
-    print(f"Error Type: {result['error_type']}")
-    print(f"Message: {result['message']}")
+    result_state = text2sql_agent(state)
+    sql_result = result_state["sql_result"]
+
+    print(f"Success: {sql_result['success']}")
+    print(f"Error Type: {sql_result['error_type']}")
+    print(f"Message: {sql_result['message']}")
 
     print("\n" + "=" * 80)
     print("테스트 완료")
