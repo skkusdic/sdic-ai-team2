@@ -127,7 +127,7 @@ def answer(query: str, retrieved: list[tuple[float, str]]) -> str:
 # ── 5. 편의 함수 ─────────────────────────────────────────────────
 
 def embed_text(text: str) -> list:
-    pass  # TODO: 4주차에 OpenAI embeddings로 구현
+    pass  # TODO: 5주차에 OpenAI embeddings로 전환 예정
 
 
 def query_rag(company: str, query: str, k: int = 3) -> str:

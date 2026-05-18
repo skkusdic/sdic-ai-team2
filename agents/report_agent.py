@@ -86,10 +86,6 @@ def run_report_agent(state: dict) -> dict:
     return state
 
 
-def embed_text(text: str) -> list:
-    pass  # TODO: 4주차에 OpenAI embeddings로 구현
-
-
 if __name__ == '__main__':
     mock_state = {
         'company': '삼성전자',
