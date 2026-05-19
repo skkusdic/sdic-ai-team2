@@ -4,6 +4,7 @@ from typing import TypedDict, Literal, Optional
 from claude_client import ask
 from agents.analysis_agent import analyze as analyze_financials, analysis_agent
 from agents.data_agent import run_data_agent
+from agents.competitor_agent import competitor_agent
 from agents.report_agent import run_report_agent
 
 
@@ -13,6 +14,8 @@ class AnalysisState(TypedDict):
     next_agent: str
     financials: dict
     analysis: str
+    competitors: dict
+    competitor_analysis: str
     result: str
     pdf_path: str
     data_source: Optional[str]
@@ -29,19 +32,21 @@ def supervisor_node(state: AnalysisState) -> AnalysisState:
 - 기업: {state['company']}
 - 재무 데이터: {'있음' if state['financials'] else '없음'}
 - 분석 완료: {'yes' if state['analysis'] else 'no'}
+- 경쟁사 분석: {'yes' if state['competitor_analysis'] else 'no'}
 - 보고서 생성: {'yes' if state['result'] else 'no'}
 
-다음 단계를 결정하세요. 응답은 정확히 하나만: "data_agent", "analysis_agent", "report_agent" 중 하나.
+다음 단계를 결정하세요. 응답은 정확히 하나만: "data_agent", "analysis_agent", "competitor_agent", "report_agent" 중 하나.
 
 규칙:
 1. 데이터가 없으면 → "data_agent"
 2. 데이터는 있지만 분석 없으면 → "analysis_agent"
-3. 분석은 있지만 보고서 없으면 → "report_agent"
-4. 모두 완료되면 → "report_agent" (완료 신호)"""
+3. 분석은 있지만 경쟁사 분석 없으면 → "competitor_agent"
+4. 경쟁사 분석은 있지만 보고서 없으면 → "report_agent"
+5. 모두 완료되면 → "report_agent" (완료 신호)"""
 
     next_agent = ask(prompt, max_tokens=50).strip()
 
-    if next_agent not in ["data_agent", "analysis_agent", "report_agent"]:
+    if next_agent not in ["data_agent", "analysis_agent", "competitor_agent", "report_agent"]:
         next_agent = "analysis_agent"
 
     print(f"[Supervisor] Claude가 다음 agent 결정: {next_agent}")
@@ -78,6 +83,7 @@ def build_graph():
     graph.add_node("supervisor", supervisor_node)
     graph.add_node("data_agent", data_agent)
     graph.add_node("analysis_agent", analysis_agent)
+    graph.add_node("competitor_agent", competitor_agent)
     graph.add_node("report_agent", run_report_agent)
 
     # 진입점
@@ -90,6 +96,7 @@ def build_graph():
         {
             "data_agent": "data_agent",
             "analysis_agent": "analysis_agent",
+            "competitor_agent": "competitor_agent",
             "report_agent": "report_agent",
         },
     )
@@ -104,8 +111,9 @@ def build_graph():
         },
     )
 
-    # 고정 경로: analysis_agent → report_agent → END
-    graph.add_edge("analysis_agent", "report_agent")
+    # 고정 경로: analysis_agent → competitor_agent → report_agent → END
+    graph.add_edge("analysis_agent", "competitor_agent")
+    graph.add_edge("competitor_agent", "report_agent")
     graph.add_edge("report_agent", END)
 
     return graph.compile()
@@ -121,6 +129,8 @@ if __name__ == "__main__":
         "next_agent": "",
         "financials": {},
         "analysis": "",
+        "competitors": {},
+        "competitor_analysis": "",
         "result": "",
         "pdf_path": "",
         "data_source": None,
