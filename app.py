@@ -543,6 +543,45 @@ if "final_state" in st.session_state:
             with btn_col:
                 ask_btn = st.button("질문하기", type="primary", use_container_width=True)
 
+            def render_ai_answer():
+                res = st.session_state.get("ai_result")
+                if not res:
+                    return
+                actual_mode = res["mode"]
+                st.caption(f"모드: **{actual_mode}**{'  *(자동 선택)*' if res['auto'] else ''}")
+                if actual_mode == "RAG":
+                    hits = res.get("hits", [])
+                    if hits:
+                        st.markdown('<div class="section-header">검색 결과 (상위 3개)</div>', unsafe_allow_html=True)
+                        for i, hit in enumerate(hits):
+                            score = hit["score"]
+                            chunk = hit["text"]
+                            st.markdown(
+                                f'<div style="background:rgba(45,106,79,0.06);border-left:3px solid #74c69d;border-radius:10px;padding:0.7rem 1rem;margin-bottom:0.5rem;">'
+                                f'<span style="font-size:0.72rem;color:#8aab8e;font-weight:600;">발췌 {i+1} · 유사도 {score:.3f}</span><br>'
+                                f'<span style="font-size:0.85rem;color:#2c3e30;">{chunk}</span>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                    st.markdown('<div class="section-header">Claude 답변</div>', unsafe_allow_html=True)
+                    raw = res["answer"]
+                    clean = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', raw)
+                    if "결론:" in clean:
+                        body, conclusion = clean.split("결론:", 1)
+                        st.markdown(f'<div class="analysis-card fade-in">{body}</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div style="background:rgba(45,106,79,0.13);border-left:4px solid #40916c;border-radius:12px;padding:1rem 1.3rem;margin-top:1rem;"><span style="font-size:1.08rem;font-weight:800;color:#1b4332;">결론</span><span style="font-size:1.05rem;font-weight:700;color:#1b4332;">{conclusion}</span></div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div class="analysis-card fade-in">{clean}</div>', unsafe_allow_html=True)
+                else:
+                    if res.get("sql"):
+                        st.markdown('<div class="section-header">생성된 SQL</div>', unsafe_allow_html=True)
+                        st.code(res["sql"], language="sql")
+                    if res.get("success") and res.get("df") is not None and not res["df"].empty:
+                        st.markdown('<div class="section-header">결과</div>', unsafe_allow_html=True)
+                        st.dataframe(res["df"], use_container_width=True)
+                    else:
+                        st.markdown(f'<div class="analysis-card fade-in">{res.get("message", "결과가 없습니다.")}</div>', unsafe_allow_html=True)
+
             if ask_btn:
                 if not question:
                     st.error("질문을 입력해주세요.")
@@ -554,13 +593,8 @@ if "final_state" in st.session_state:
                         if RAG_AVAILABLE:
                             with st.spinner("RAG 검색 중..."):
                                 hits = rag_search(company, question, top_k=3)
-                                answer = rag_answer(question, [(h["score"], h["text"]) for h in hits])
-                            st.markdown('<div class="section-header">검색 결과 (상위 3개)</div>', unsafe_allow_html=True)
-                            for i, hit in enumerate(hits, 1):
-                                with st.expander(f"{i}위 — 유사도 {hit['score']:.3f}"):
-                                    st.write(hit["text"])
-                            st.markdown('<div class="section-header">Claude 답변</div>', unsafe_allow_html=True)
-                            st.markdown(f'<div class="analysis-card fade-in">{answer}</div>', unsafe_allow_html=True)
+                                ans = rag_answer(question, [(h["score"], h["text"]) for h in hits])
+                            st.session_state["ai_result"] = {"mode": "RAG", "auto": mode == "자동", "answer": ans, "hits": hits}
                         else:
                             st.markdown("""<div style="background:rgba(45,106,79,0.07);border-radius:14px;padding:1rem 1.2rem;border:1.5px solid #c8e6c9;color:#2d6a4f;font-size:0.88rem;">
                             RAG 모듈 연결 준비 중입니다. 팀원 작업 완료 후 자동으로 활성화됩니다.
@@ -570,20 +604,19 @@ if "final_state" in st.session_state:
                         if TEXT2SQL_AVAILABLE:
                             with st.spinner("SQL 생성 중..."):
                                 result = text2sql_query(question, company)
-                            st.markdown('<div class="section-header">생성된 SQL</div>', unsafe_allow_html=True)
-                            st.code(result["sql"], language="sql")
-                            if result["success"]:
-                                st.markdown('<div class="section-header">결과</div>', unsafe_allow_html=True)
-                                if not result["df"].empty:
-                                    st.dataframe(result["df"], use_container_width=True)
-                                else:
-                                    st.info("조회 결과가 없습니다.")
-                            else:
-                                st.error(result.get("message", "SQL 실행 중 오류가 발생했습니다."))
+                            st.session_state["ai_result"] = {
+                                "mode": "Text2SQL", "auto": mode == "자동",
+                                "sql": result.get("sql", ""),
+                                "df": result.get("df"),
+                                "success": result.get("success", False),
+                                "message": result.get("message", ""),
+                            }
                         else:
                             st.markdown("""<div style="background:rgba(45,106,79,0.07);border-radius:14px;padding:1rem 1.2rem;border:1.5px solid #c8e6c9;color:#2d6a4f;font-size:0.88rem;">
                             Text2SQL 모듈 연결 준비 중입니다. 팀원 작업 완료 후 자동으로 활성화됩니다.
                             </div>""", unsafe_allow_html=True)
+
+            render_ai_answer()
 
         # PDF 다운로드 (탭 밖)
         if pdf_path and os.path.exists(pdf_path):
