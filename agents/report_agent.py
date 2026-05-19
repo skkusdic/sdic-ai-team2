@@ -39,8 +39,11 @@ class _PDF(FPDF):
     def __init__(self, company: str):
         super().__init__()
         self.company = company
-        fp = os.path.join(os.path.dirname(__file__), '..', 'fonts', 'NanumGothic.ttf')
-        self.add_font('N', '', fp)
+        base = os.path.join(os.path.dirname(__file__), '..', 'fonts')
+        self.add_font('N', '',  os.path.join(base, 'NanumGothic.ttf'))
+        bold = os.path.join(base, 'NanumGothicBold.ttf')
+        if os.path.exists(bold):
+            self.add_font('N', 'B', bold)
         self.set_auto_page_break(True, margin=18)
         self.set_margins(15, 15, 15)
 
@@ -108,75 +111,83 @@ def _delta(cur: int, prv) -> str:
 def _cover(pdf: _PDF, company: str, years: list, financials: dict):
     pdf.add_page()
 
-    # 전체 다크 그린 (흰 배경 없음)
-    pdf.set_fill_color(*_D)
+    # 살짝 연한 다크 그린 배경
+    pdf.set_fill_color(38, 82, 60)
     pdf.rect(0, 0, 210, 297, 'F')
 
-    # 좌측 세로 포인트 바
-    pdf.set_fill_color(*_L)
-    pdf.rect(18, 44, 2, 100, 'F')
+    # ── 상단 얇은 액센트 바 ──
+    pdf.set_fill_color(*_AC)
+    pdf.rect(0, 0, 210, 3, 'F')
 
-    # ── 타이틀 ──
-    pdf.set_font('N', size=22)
+    # ── 전체 내용 수직 중앙 정렬 (총 높이 ≈ 135mm, 시작 y = (297-135)/2 ≈ 81) ──
+    y = 75
+
+    # 타이틀
+    pdf.set_font('N', size=28)
     pdf.set_text_color(*_WH)
-    pdf.set_xy(26, 48)
-    pdf.cell(170, 12, 'SDIC AI', align='L')
-    pdf.set_xy(26, 62)
-    pdf.cell(170, 12, '기업 재무 분석 리포트', align='L')
+    pdf.set_xy(20, y)
+    pdf.cell(170, 16, 'SDIC AI', align='C')
+    y += 16
 
-    # ── 팀 정보 (타이틀 바로 아래, 흰색) ──
+    pdf.set_font('N', size=26)
+    pdf.set_xy(20, y)
+    pdf.cell(170, 15, '기업 재무 분석 리포트', align='C')
+    y += 15
+
+    # 팀 정보 (흰색)
+    pdf.set_font('N', 'B', size=13)
+    pdf.set_text_color(*_WH)
+    pdf.set_xy(20, y + 6)
+    pdf.cell(170, 9, 'SDIC Team 2', align='C')
+    y += 15
+
     pdf.set_font('N', size=11)
     pdf.set_text_color(*_WH)
-    pdf.set_xy(26, 78)
-    pdf.cell(170, 7, 'SDIC Team 2', align='L')
+    pdf.set_xy(20, y + 2)
+    pdf.cell(170, 8, '김경민  ·  주희진  ·  오하영  ·  신지우', align='C')
+    y += 10
 
-    pdf.set_font('N', size=9)
-    pdf.set_text_color(180, 220, 200)
-    pdf.set_xy(26, 87)
-    pdf.cell(170, 6, '김경민  ·  주희진  ·  오하영  ·  신지우', align='L')
-
-    # ── 구분선 → 기업명 ──
+    # 구분선
     pdf.set_draw_color(*_AC)
-    pdf.set_line_width(0.7)
-    pdf.line(26, 99, 184, 99)
+    pdf.set_line_width(0.8)
+    pdf.line(40, y + 6, 170, y + 6)
+    y += 14
 
-    pdf.set_font('N', size=20)
-    pdf.set_text_color(*_AC)
-    pdf.set_xy(26, 103)
-    pdf.cell(170, 12, company, align='L')
+    # 기업명 (흰색에 가깝게)
+    pdf.set_font('N', 'B', size=24)
+    pdf.set_text_color(235, 250, 245)
+    pdf.set_xy(20, y)
+    pdf.cell(170, 14, company, align='C')
+    y += 14
 
+    # 분석 기간 (흰색에 가깝게)
+    pdf.set_font('N', size=11)
+    pdf.set_text_color(220, 242, 235)
+    pdf.set_xy(20, y + 2)
+    pdf.cell(170, 8, f'분석 기간: {min(years)}년 ~ {max(years)}년  ·  2026년 5월', align='C')
+    y += 12
+
+    # 출처 + 면책
     pdf.set_font('N', size=9)
-    pdf.set_text_color(180, 220, 200)
-    pdf.set_xy(26, 118)
-    pdf.cell(170, 6, f'분석 기간: {min(years)}년 ~ {max(years)}년  ·  2026년 5월', align='L')
+    pdf.set_text_color(200, 230, 220)
+    pdf.set_xy(20, y + 4)
+    pdf.cell(170, 6, '금융감독원 DART 공시 데이터 기반  ·  dart.fss.or.kr', align='C')
+    y += 10
 
-    # ── 데이터 출처 ──
-    pdf.set_draw_color(*_L)
-    pdf.set_line_width(0.3)
-    pdf.line(26, 132, 184, 132)
+    pdf.set_font('N', size=8.5)
+    pdf.set_text_color(185, 218, 208)
+    pdf.set_xy(20, y + 2)
+    pdf.cell(170, 6, '본 보고서는 AI 분석 도구로 생성되었으며 투자 조언을 구성하지 않습니다.', align='C')
 
-    pdf.set_font('N', size=8)
-    pdf.set_text_color(160, 210, 185)
-    pdf.set_xy(26, 136)
-    pdf.cell(170, 6, '2026년 5월  ·  금융감독원 DART 공시 데이터 기반', align='L')
-
-    # ── 면책 문구 ──
-    pdf.set_draw_color(*_L)
-    pdf.set_line_width(0.3)
-    pdf.line(26, 150, 184, 150)
-
-    pdf.set_font('N', size=7.5)
-    pdf.set_text_color(140, 190, 165)
-    pdf.set_xy(26, 154)
-    pdf.cell(170, 6, '본 보고서는 AI 분석 도구로 생성되었으며 투자 조언을 구성하지 않습니다.', align='L')
-    pdf.set_xy(26, 161)
-    pdf.cell(170, 6, '데이터 출처: 금융감독원 전자공시시스템 (DART)  ·  dart.fss.or.kr', align='L')
+    # 하단 얇은 액센트 바
+    pdf.set_fill_color(*_AC)
+    pdf.rect(0, 294, 210, 3, 'F')
 
 
 # ── 2. 목차 + 분석 방법론 페이지 ────────────────────────────────────
 
 def _toc(pdf: _PDF, has_competitors: bool):
-    # ── 목차 헤더 ──
+    # 목차 헤더 배너
     pdf.set_fill_color(*_D)
     pdf.rect(0, 14, 210, 28, 'F')
     pdf.set_font('N', size=14)
@@ -186,82 +197,98 @@ def _toc(pdf: _PDF, has_competitors: bool):
     pdf.set_xy(15, 44)
 
     toc_items = [
-        ('I.',   '연도별 재무 현황 (매출액 · 영업이익 · 순이익 · 이익률)'),
-        ('II.',  '전년 대비 성장률 (YoY)'),
-        ('III.', '재무 지표 추이 차트'),
-        ('IV.',  'Claude AI 재무 분석'),
+        ('I.',    '핵심 지표 요약 및 분석 방법론'),
+        ('II.',   '연도별 재무 현황 (매출액 · 영업이익 · 순이익 · 이익률)'),
+        ('III.',  '전년 대비 성장률 (YoY)'),
+        ('IV.',   '재무 지표 추이 차트'),
+        ('V.',    'Claude AI 재무 분석'),
+        ('VI.',   '산업 동향 분석'),
+        ('VII.',  '산업별 맞춤 분석'),
     ]
     if has_competitors:
-        toc_items.append(('V.', '경쟁사 비교 분석'))
+        toc_items.append(('VIII.', '경쟁사 비교 분석'))
 
-    for num, title in toc_items:
+    pdf.ln(6)  # 헤더 박스 아래 여백
+
+    for i, (num, title) in enumerate(toc_items):
         y = pdf.get_y()
-        pdf.set_fill_color(*_RA)
-        pdf.rect(15, y, 180, 10, 'F')
-        pdf.set_font('N', size=9)
+        bg = _RA if i % 2 == 0 else _WH
+        pdf.set_fill_color(*bg)
+        pdf.rect(15, y, 180, 11, 'F')
+        pdf.set_fill_color(*_M)
+        pdf.rect(15, y, 3, 11, 'F')
+        pdf.set_font('N', 'B', size=11)
         pdf.set_text_color(*_M)
-        pdf.set_xy(18, y + 2)
-        pdf.cell(12, 6, num)
+        pdf.set_xy(21, y + 2)
+        pdf.cell(16, 7, num)
+        pdf.set_font('N', size=11)
         pdf.set_text_color(*_TX)
-        pdf.set_xy(32, y + 2)
-        pdf.cell(155, 6, title)
+        pdf.set_xy(39, y + 2)
+        pdf.cell(153, 7, title)
         pdf.ln(12)
 
-    pdf.ln(2)
-    pdf.set_draw_color(*_LG)
-    pdf.set_line_width(0.3)
-    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
-    pdf.ln(8)
+    pdf.set_text_color(*_TX)
 
-    # ── 분석 방법론 ──
-    y = pdf.get_y()
-    pdf.set_fill_color(*_M)
-    pdf.rect(15, y, 3, 8, 'F')
-    pdf.set_font('N', size=12)
-    pdf.set_text_color(*_D)
-    pdf.set_xy(21, y)
-    pdf.cell(0, 8, '분석 방법론', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.set_draw_color(*_LG)
-    pdf.set_line_width(0.3)
-    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
-    pdf.ln(5)
 
-    # 구현 완료 항목
-    methodology = [
-        ('재무 데이터',
-         '금융감독원 DART 전자공시 연결 재무제표 기준  ·  SQLite 캐시 저장'),
-        ('AI 정성 분석',
-         'Anthropic Claude (claude-haiku-4-5) 기반  ·  할루시네이션 방지 프롬프트 적용'),
-        ('RAG 검색',
-         'TF-IDF 벡터화 + 코사인 유사도 기반 문서 검색  ·  joblib 캐시'),
-        ('시각화',
-         '연도별 매출·이익 추이 꺾은선 + 영업이익률 막대 차트 자동 생성'),
-        ('경쟁사 비교',
-         'Claude 기반 동일 업종 경쟁사 식별 → DART API 재무 데이터 자동 수집 및 비교'),
-        ('산업 동향 분석',
-         'Claude AI 기반 시장 규모·성장률 추세, 핵심 기술 변화, 정책·규제 환경 분석'),
-        ('산업별 맞춤 분석',
-         '업종 특화 KPI(반도체 ASP, 금융 BIS 비율 등), 규제 리스크, 산업 사이클 위치 분석'),
+# ── 분석 방법론 (테이블) ─────────────────────────────────────────────
+
+def _methodology_compact(pdf: _PDF):
+    pdf.sec('분석 방법론')
+
+    items = [
+        ('재무 데이터',   'DART 전자공시 연결 재무제표 기준  ·  SQLite 캐시'),
+        ('AI 분석',       'Anthropic Claude (claude-haiku-4-5)  ·  할루시네이션 방지 프롬프트'),
+        ('RAG 검색',      'TF-IDF 벡터화 + 코사인 유사도 기반 문서 검색  ·  joblib 캐시'),
+        ('시각화',        '매출·이익 추이 꺾은선 + 영업이익률 막대 차트 자동 생성'),
+        ('경쟁사 비교',   'Claude 경쟁사 식별 → DART API 재무 데이터 자동 수집 및 비교'),
+        ('산업 동향',     '시장 규모·성장률 추세, 핵심 기술 변화, 정책·규제 환경 분석'),
+        ('산업별 맞춤',   '업종 특화 KPI · 규제 리스크 · 산업 사이클 위치 분석'),
     ]
 
-    for label, desc in methodology:
-        y = pdf.get_y()
-        pdf.set_font('N', size=8.5)
-        pdf.set_text_color(*_M)
-        pdf.set_xy(18, y)
-        pdf.cell(38, 6, f'· {label}')
+    lw, rw = 35, 145  # 분류 열, 내용 열
+
+    # 헤더
+    y0, x0 = pdf.get_y(), 15
+    pdf.set_fill_color(*_D)
+    pdf.set_text_color(*_WH)
+    pdf.set_font('N', size=8)
+    for header, w in [('분류', lw), ('내용', rw)]:
+        pdf.set_draw_color(*_LG)
+        pdf.set_line_width(0.3)
+        pdf.set_xy(x0, y0)
+        pdf.cell(w, 7, header, border=1, align='C', fill=True)
+        x0 += w
+    pdf.ln(7)
+
+    for idx, (label, desc) in enumerate(items):
+        y0, x0 = pdf.get_y(), 15
+        bg = _RA if idx % 2 == 0 else _WH
+        pdf.set_fill_color(*bg)
+        pdf.set_draw_color(*_LG)
+        pdf.set_line_width(0.3)
         pdf.set_text_color(*_TX)
-        pdf.set_xy(56, y)
-        pdf.multi_cell(134, 6, desc, align='L')
-        pdf.ln(2)
+        pdf.set_font('N', 'B', size=8)
+        pdf.set_xy(x0, y0)
+        pdf.cell(lw, 7, label, border=1, align='C', fill=True)
+        pdf.set_font('N', size=8)
+        pdf.set_xy(x0 + lw, y0)
+        pdf.cell(rw, 7, desc, border=1, align='L', fill=True)
+        pdf.ln(7)
 
     pdf.set_text_color(*_TX)
+    pdf.ln(4)
 
 
 # ── 3. KPI 핵심 지표 ─────────────────────────────────────────────────
 
 def _kpi_section(pdf: _PDF, financials: dict):
-    pdf.sec('핵심 지표 요약')
+    # 방법론↔KPI 구분 — 여백 사이 가운데 구분선
+    pdf.ln(3)
+    pdf.set_draw_color(*_LG)
+    pdf.set_line_width(0.5)
+    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+    pdf.ln(3)
+    pdf.sec('I.  핵심 지표 요약')
 
     sorted_f = sorted(financials.items())
     latest_year, latest = sorted_f[-1]
@@ -526,10 +553,25 @@ def _competitor_section(pdf: _PDF, company: str, financials: dict,
     if competitor_analysis and competitor_analysis not in ('경쟁사 데이터가 없습니다.', '회사명이 없습니다.'):
         clean = re.sub(r'\*\*(.+?)\*\*', r'\1', competitor_analysis)
         clean = re.sub(r'\*(.+?)\*',     r'\1', clean)
-        pdf.set_font('N', size=9)
-        pdf.set_text_color(*_TX)
-        pdf.set_xy(15, pdf.get_y())
-        pdf.multi_cell(180, 6, clean, align='L')
+        token_pat = re.compile(
+            r'(\d[\d,\.]*\s*(?:조원|억원|%p|%|만원|원|배|년|분기)?)'
+        )
+        for para in clean.split('\n'):
+            if not para.strip():
+                pdf.ln(3)
+                continue
+            pdf.set_xy(15, pdf.get_y())
+            for tok in token_pat.split(para):
+                if not tok:
+                    continue
+                if token_pat.fullmatch(tok):
+                    pdf.set_font('N', 'B', size=10.5)
+                    pdf.set_text_color(*_D)
+                else:
+                    pdf.set_font('N', size=10.5)
+                    pdf.set_text_color(*_TX)
+                pdf.write(6.5, tok)
+            pdf.ln(6.5)
         pdf.ln(3)
 
 
@@ -636,34 +678,153 @@ def _charts_section(pdf: _PDF, financials: dict, company: str):
 
 # ── 5. AI 분석 섹션 ──────────────────────────────────────────────────
 
+def _parse_numbered(text: str) -> list[tuple[str, str]]:
+    """'1. 제목\n내용' 형태를 (제목, 내용) 리스트로 파싱. 번호 앞 프리앰블 제거."""
+    clean = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    clean = re.sub(r'\*(.+?)\*',     r'\1', clean)
+    clean = re.sub(r'#+\s*',         '',    clean)
+    clean = re.sub(r'^\s*---+\s*$',  '',    clean, flags=re.MULTILINE)
+    clean = re.sub(r'\.\.\.',        '',    clean)
+    clean = re.sub(r'\n{3,}',        '\n\n', clean)
+    # 첫 번째 '1.' 이전 내용 제거
+    first = re.search(r'(?m)^1\.', clean)
+    if first:
+        clean = clean[first.start():]
+    parts = re.split(r'\n(?=\d+\.)', clean.strip())
+    result = []
+    for p in parts:
+        lines = p.strip().splitlines()
+        if not lines:
+            continue
+        header = re.sub(r'^\d+\.\s*', '', lines[0]).strip()
+        body   = '\n'.join(l.strip() for l in lines[1:] if l.strip())
+        if header:
+            result.append((header, body))
+    return result
+
+
+def _render_analysis_block(pdf: _PDF, sec_title: str, text: str, subtitle: str = ''):
+    """산업 분석 블록 — 카드 스타일 (테두리만, 채움 없음)."""
+    pdf.sec(sec_title)
+
+    # 산업명 — 2줄 가능한 큰 박스
+    if subtitle:
+        lines_needed = max(1, len(subtitle) // 52 + 1)
+        box_h = 10 + lines_needed * 8
+        y = pdf.get_y()
+        pdf.set_fill_color(*_RA)
+        pdf.rect(15, y, 180, box_h, 'F')
+        pdf.set_draw_color(*_L)
+        pdf.set_line_width(0.8)
+        pdf.rect(15, y, 180, box_h, 'D')
+        pdf.set_fill_color(*_M)
+        pdf.rect(15, y, 4, box_h, 'F')
+        pdf.set_font('N', 'B', size=11)
+        pdf.set_text_color(*_D)
+        pdf.set_xy(22, y + (box_h - lines_needed * 8) / 2 + 1)
+        pdf.multi_cell(170, 8, subtitle, align='L')
+        pdf.set_xy(15, y + box_h + 4)
+        pdf.ln(0)
+
+    # 마크다운 제거 (# 헤더, **볼드**, *이탤릭*, --- 구분선, ... 생략 표시)
+    clean_text = re.sub(r'#+\s*',          '',  text)
+    clean_text = re.sub(r'\*\*(.+?)\*\*',  r'\1', clean_text)
+    clean_text = re.sub(r'\*(.+?)\*',      r'\1', clean_text)
+    clean_text = re.sub(r'^\s*---+\s*$',   '',  clean_text, flags=re.MULTILINE)
+    clean_text = re.sub(r'\.\.\.',         '',  clean_text)
+    clean_text = re.sub(r'\n{3,}',         '\n\n', clean_text)
+
+    sections = _parse_numbered(clean_text)
+    if not sections:
+        pdf.set_font('N', size=9.5)
+        pdf.set_text_color(*_TX)
+        pdf.set_xy(15, pdf.get_y())
+        pdf.multi_cell(180, 6, clean_text.strip(), align='L')
+        return
+
+    def _est_h(body_text: str, body_w: float = 172, line_h: float = 6) -> float:
+        """한국어 문자 단위 줄 수 계산."""
+        pdf.set_font('N', size=9)
+        h = 0.0
+        for para in (body_text.strip().split('\n') if body_text else []):
+            if not para.strip():
+                h += line_h * 0.5
+                continue
+            lw, lines = 0.0, 1
+            for ch in para:
+                cw = pdf.get_string_width(ch)
+                if lw + cw > body_w and lw > 0:
+                    lines += 1
+                    lw = cw
+                else:
+                    lw += cw
+            h += lines * line_h
+        return 13 + h + 10  # header + body + bottom padding
+
+    for i, (header, body) in enumerate(sections):
+        est = _est_h(body) * 1.3   # 30% 여유
+
+        # 남은 공간이 부족하면 새 페이지
+        if pdf.get_y() + est > 268:
+            pdf.add_page()
+
+        y_start  = pdf.get_y()
+        pg_start = pdf.page_no()
+
+        # ① 헤더 (항상 고정 높이)
+        pdf.set_fill_color(*_RA)
+        pdf.rect(15, y_start, 180, 11, 'F')
+        pdf.set_fill_color(*_M)
+        pdf.rect(15, y_start, 11, 11, 'F')
+        pdf.set_font('N', 'B', size=8.5)
+        pdf.set_text_color(*_WH)
+        pdf.set_xy(15, y_start + 2)
+        pdf.cell(11, 7, str(i + 1), align='C')
+        pdf.set_font('N', 'B', size=9)
+        pdf.set_text_color(*_D)
+        pdf.set_xy(29, y_start + 2)
+        pdf.cell(163, 7, header, align='L')
+
+        # ② 본문 — auto_page_break ON 유지 (내용이 길어도 잘리지 않음)
+        if body:
+            pdf.set_font('N', size=9)
+            pdf.set_text_color(*_TX)
+            pdf.set_xy(19, y_start + 13)
+            pdf.multi_cell(172, 6, body.strip(), align='L')
+
+        pdf.ln(3)
+        y_end   = pdf.get_y()
+        pg_end  = pdf.page_no()
+
+        # ③ 테두리: 페이지 전환 없을 때만 박스, 페이지 걸치면 좌측 선만
+        if pg_end == pg_start:
+            pdf.set_draw_color(*_L)
+            pdf.set_line_width(0.8)
+            pdf.rect(15, y_start, 180, y_end - y_start, 'D')
+        else:
+            # 현재 페이지 좌측 선만 표시
+            pdf.set_draw_color(*_L)
+            pdf.set_line_width(1.5)
+            pdf.line(15, 14, 15, y_end)
+
+        pdf.ln(4)
+
+    pdf.ln(2)
+
+
 def _industry_section(pdf: _PDF, industry: str, trend: str, specific: str):
     if not trend and not specific:
         return
 
-    def _clean(text):
-        text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
-        return re.sub(r'\*(.+?)\*', r'\1', text)
+    subtitle = industry if industry else ''
 
     if trend:
-        if pdf.get_y() > 220:
-            pdf.add_page()
-        sub = f'  ({industry})' if industry else ''
-        pdf.sec(f'산업 동향 분석{sub}')
-        pdf.set_font('N', size=9)
-        pdf.set_text_color(*_TX)
-        pdf.set_xy(15, pdf.get_y())
-        pdf.multi_cell(180, 6, _clean(trend), align='L')
-        pdf.ln(4)
+        pdf.add_page()
+        _render_analysis_block(pdf, 'VI.  산업 동향 분석', trend, subtitle)
 
     if specific:
-        if pdf.get_y() > 220:
-            pdf.add_page()
-        pdf.sec('산업별 맞춤 분석')
-        pdf.set_font('N', size=9)
-        pdf.set_text_color(*_TX)
-        pdf.set_xy(15, pdf.get_y())
-        pdf.multi_cell(180, 6, _clean(specific), align='L')
-        pdf.ln(4)
+        pdf.add_page()
+        _render_analysis_block(pdf, 'VII.  산업별 맞춤 분석', specific, subtitle)
 
 
 def _analysis_section(pdf: _PDF, analysis: str):
@@ -680,10 +841,31 @@ def _analysis_section(pdf: _PDF, analysis: str):
     clean = re.sub(r'\*(.+?)\*',     r'\1', clean)
     clean = re.sub(r'^#{1,6}\s+',    '',    clean, flags=re.MULTILINE)
 
-    pdf.set_font('N', size=9)
-    pdf.set_text_color(*_TX)
-    pdf.set_xy(15, pdf.get_y())
-    pdf.multi_cell(180, 6, clean, align='L')
+    # 숫자/퍼센트/단위 패턴을 볼드로 렌더링
+    token_pat = re.compile(
+        r'(\d[\d,\.]*\s*(?:조원|억원|%p|%|만원|원|배|년|분기)?)'
+    )
+    for para in clean.split('\n'):
+        if not para.strip():
+            pdf.ln(3)
+            continue
+        tokens = token_pat.split(para)
+        x_start = 15
+        pdf.set_xy(x_start, pdf.get_y())
+        line_w = 180
+        for tok in tokens:
+            if not tok:
+                continue
+            is_num = bool(token_pat.fullmatch(tok))
+            if is_num:
+                pdf.set_font('N', 'B', size=10)
+                pdf.set_text_color(*_D)
+            else:
+                pdf.set_font('N', size=10)
+                pdf.set_text_color(*_TX)
+            # multi_cell로 줄바꿈 처리 (마지막 토큰이면 줄바꿈)
+            pdf.write(6, tok)
+        pdf.ln(6)
 
     pdf.ln(4)
     pdf.set_font('N', size=7)
@@ -712,12 +894,13 @@ def generate_pdf(company: str, financials: dict, analysis: str,
     # 1페이지: 표지
     _cover(pdf, company, years, financials)
 
-    # 2페이지: 목차 + 분석 방법론
+    # 2페이지: 목차
     pdf.add_page()
     _toc(pdf, has_comp)
 
-    # 3페이지: KPI + 재무 테이블 + YoY
+    # 3페이지: 분석 방법론 + KPI + 재무 테이블 + YoY
     pdf.add_page()
+    _methodology_compact(pdf)
     _kpi_section(pdf, financials)
     _financial_table(pdf, financials)
     _yoy_table(pdf, financials)
