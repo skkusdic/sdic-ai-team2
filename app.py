@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import re
 import plotly.express as px
 
 # Streamlit Cloud: secrets → os.environ 동기화 (로컬엔 secrets.toml 없으므로 무시)
@@ -592,8 +593,9 @@ if "final_state" in st.session_state:
                     if actual_mode == "RAG":
                         if RAG_AVAILABLE:
                             with st.spinner("RAG 검색 중..."):
-                                hits = rag_search(company, question, top_k=3)
-                                ans = rag_answer(question, [(h["score"], h["text"]) for h in hits])
+                                hits, all_chunks = rag_search(company, question, top_k=3)
+                                all_retrieved = [(1.0, c) for c in all_chunks]
+                                ans = rag_answer(question, all_retrieved)
                             st.session_state["ai_result"] = {"mode": "RAG", "auto": mode == "자동", "answer": ans, "hits": hits}
                         else:
                             st.markdown("""<div style="background:rgba(45,106,79,0.07);border-radius:14px;padding:1rem 1.2rem;border:1.5px solid #c8e6c9;color:#2d6a4f;font-size:0.88rem;">
