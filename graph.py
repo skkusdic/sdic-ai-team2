@@ -5,6 +5,7 @@ from claude_client import ask
 from agents.analysis_agent import analyze as analyze_financials, analysis_agent
 from agents.data_agent import run_data_agent
 from agents.competitor_agent import competitor_agent
+from agents.industry_agent import industry_agent
 from agents.report_agent import run_report_agent
 
 
@@ -16,6 +17,9 @@ class AnalysisState(TypedDict):
     analysis: str
     competitors: dict
     competitor_analysis: str
+    industry: str
+    industry_trend: str
+    industry_specific: str
     result: str
     pdf_path: str
     data_source: Optional[str]
@@ -84,6 +88,7 @@ def build_graph():
     graph.add_node("data_agent", data_agent)
     graph.add_node("analysis_agent", analysis_agent)
     graph.add_node("competitor_agent", competitor_agent)
+    graph.add_node("industry_agent", industry_agent)
     graph.add_node("report_agent", run_report_agent)
 
     # 진입점
@@ -111,9 +116,10 @@ def build_graph():
         },
     )
 
-    # 고정 경로: analysis_agent → competitor_agent → report_agent → END
+    # 고정 경로: analysis_agent → competitor_agent → industry_agent → report_agent → END
     graph.add_edge("analysis_agent", "competitor_agent")
-    graph.add_edge("competitor_agent", "report_agent")
+    graph.add_edge("competitor_agent", "industry_agent")
+    graph.add_edge("industry_agent", "report_agent")
     graph.add_edge("report_agent", END)
 
     return graph.compile()
@@ -131,6 +137,9 @@ if __name__ == "__main__":
         "analysis": "",
         "competitors": {},
         "competitor_analysis": "",
+        "industry": "",
+        "industry_trend": "",
+        "industry_specific": "",
         "result": "",
         "pdf_path": "",
         "data_source": None,

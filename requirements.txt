@@ -1,8 +1,10 @@
 streamlit
 langgraph
 anthropic
+dart-fss
 python-dotenv
 plotly
+matplotlib
 fpdf2
 scikit-learn
 joblib
