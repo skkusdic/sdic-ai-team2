@@ -228,6 +228,39 @@ def get_financials(company_name: str) -> dict:
     return _load_from_db(company_name)
 
 
+def get_competitors(company_name: str) -> dict:
+    """주어진 기업의 동일 산업 경쟁사 3곳의 재무 데이터를 반환.
+
+    반환 형식: {
+        "기업명": {연도: {"매출액": ..., "영업이익": ..., "순이익": ...}, ...},
+        ...
+    }
+    경쟁사를 찾지 못하거나 데이터가 없으면 빈 dict 반환.
+    """
+    from claude_client import ask
+
+    prompt = (
+        f"'{company_name}'과 같은 산업의 한국 상장 경쟁사 3곳의 이름만 줄바꿈으로 나열해줘. "
+        "회사명만, 다른 설명 없이."
+    )
+    raw = ask(prompt, max_tokens=100).strip()
+
+    competitors = []
+    for line in raw.splitlines():
+        name = line.strip().lstrip("0123456789.-) ").strip()
+        if name:
+            competitors.append(name)
+    competitors = competitors[:3]
+
+    result = {}
+    for comp in competitors:
+        data = get_financials(comp)
+        if data:
+            result[comp] = data
+
+    return result
+
+
 if __name__ == "__main__":
     import sys
     import time
