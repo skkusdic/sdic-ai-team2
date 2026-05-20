@@ -261,6 +261,51 @@ def get_competitors(company_name: str) -> dict:
     return result
 
 
+def get_industry_news(company_name: str, display: int = 10) -> list[dict]:
+    """네이버 뉴스 검색 API로 기업 관련 최신 뉴스 수집.
+
+    반환 형식: [{"title": str, "description": str, "pubDate": str}, ...]
+    API 키 미설정 또는 오류 시 빈 리스트 반환.
+    """
+    import re
+
+    client_id = os.environ.get("NAVER_CLIENT_ID", "")
+    client_secret = os.environ.get("NAVER_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        try:
+            import streamlit as st
+            client_id = st.secrets.get("NAVER_CLIENT_ID", "")
+            client_secret = st.secrets.get("NAVER_CLIENT_SECRET", "")
+        except Exception:
+            pass
+    if not client_id or not client_secret:
+        return []
+
+    try:
+        resp = requests.get(
+            "https://openapi.naver.com/v1/search/news.json",
+            headers={
+                "X-Naver-Client-Id": client_id,
+                "X-Naver-Client-Secret": client_secret,
+            },
+            params={"query": f"{company_name} 산업 동향", "display": display, "sort": "date"},
+            timeout=10,
+        )
+        items = resp.json().get("items", [])
+    except Exception:
+        return []
+
+    tag_re = re.compile(r"<[^>]+>")
+    result = []
+    for item in items:
+        result.append({
+            "title": tag_re.sub("", item.get("title", "")),
+            "description": tag_re.sub("", item.get("description", "")),
+            "pubDate": item.get("pubDate", ""),
+        })
+    return result
+
+
 if __name__ == "__main__":
     import sys
     import time
