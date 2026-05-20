@@ -939,6 +939,18 @@ def generate_pdf(company: str, financials: dict, analysis: str,
 
 
 def run_report_agent(state: dict) -> dict:
+    # 파이프라인에 industry_agent가 없으면 여기서 직접 호출
+    if not state.get('industry_trend') and state.get('company') and state.get('financials'):
+        try:
+            from agents.industry_agent import industry_agent as _ia
+            industry_state = _ia({'company': state['company'], 'financials': state['financials']})
+            state = {**state,
+                     'industry':          industry_state.get('industry', ''),
+                     'industry_trend':    industry_state.get('industry_trend', ''),
+                     'industry_specific': industry_state.get('industry_specific', '')}
+        except Exception:
+            pass
+
     pdf_path = generate_pdf(
         company=state['company'],
         financials=state['financials'],
