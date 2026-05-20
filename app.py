@@ -376,6 +376,8 @@ if analyze_btn or default_company:
                 "next_agent": "",
                 "financials": {},
                 "analysis": "",
+                "competitors": {},
+                "competitor_analysis": "",
                 "result": "",
                 "pdf_path": "",
             })
@@ -508,6 +510,92 @@ if "final_state" in st.session_state:
                     lambda x: f"{x*100:+.1f}%" if pd.notna(x) else "—"
                 )
             st.dataframe(yoy[yoy["연도"] != sorted_items[0][0]].set_index("연도"), use_container_width=True)
+
+            # 경쟁사 비교 섹션
+            competitors = final_state.get("competitors", {})
+            competitor_analysis = final_state.get("competitor_analysis", "")
+
+            if competitors:
+                st.markdown(f'<div class="section-header">{company} vs 경쟁사 비교</div>', unsafe_allow_html=True)
+
+                # 경쟁사 데이터 준비
+                comp_data = []
+                for comp_name, comp_financials in competitors.items():
+                    if not comp_financials:
+                        continue
+                    latest_comp_year = max(comp_financials.keys())
+                    latest_comp = comp_financials[latest_comp_year]
+                    comp_revenue = latest_comp.get("매출액", 0)
+                    comp_op_profit = latest_comp.get("영업이익", 0)
+                    comp_op_margin = (comp_op_profit / comp_revenue * 100) if comp_revenue > 0 else 0
+
+                    comp_data.append({
+                        "기업명": comp_name,
+                        "매출액 (억원)": comp_revenue,
+                        "영업이익률 (%)": round(comp_op_margin, 1),
+                    })
+
+                # 주 기업 데이터 추가
+                main_comp_data = {
+                    "기업명": company,
+                    "매출액 (억원)": latest_rev,
+                    "영업이익률 (%)": latest_margin,
+                }
+                comp_data.insert(0, main_comp_data)
+
+                comp_df = pd.DataFrame(comp_data)
+
+                # 매출액 비교 차트
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    fig_revenue = px.bar(
+                        comp_df,
+                        x="기업명",
+                        y="매출액 (억원)",
+                        title="매출액 비교",
+                        color="기업명",
+                        color_discrete_sequence=["#2d6a4f", "#74c69d", "#a8d5ba", "#d8f3dc"],
+                    )
+                    fig_revenue.update_layout(
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        font=dict(family="Pretendard, sans-serif", size=11, color="#3a4a3d"),
+                        showlegend=False,
+                        margin=dict(l=0, r=0, t=40, b=0),
+                        xaxis=dict(showgrid=False, linecolor="#d0e8d3"),
+                        yaxis=dict(gridcolor="rgba(200,230,210,0.4)", linecolor="#d0e8d3",
+                                   tickformat=",", title="매출액 (억원)"),
+                        height=300,
+                    )
+                    st.plotly_chart(fig_revenue, use_container_width=True)
+
+                with col2:
+                    fig_margin = px.bar(
+                        comp_df,
+                        x="기업명",
+                        y="영업이익률 (%)",
+                        title="영업이익률 비교",
+                        color="기업명",
+                        color_discrete_sequence=["#FF6B6B", "#FF9999", "#FFB3B3", "#FFD9D9"],
+                    )
+                    fig_margin.update_layout(
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        font=dict(family="Pretendard, sans-serif", size=11, color="#3a4a3d"),
+                        showlegend=False,
+                        margin=dict(l=0, r=0, t=40, b=0),
+                        xaxis=dict(showgrid=False, linecolor="#d0e8d3"),
+                        yaxis=dict(gridcolor="rgba(200,230,210,0.4)", linecolor="#d0e8d3",
+                                   title="영업이익률 (%)"),
+                        height=300,
+                    )
+                    st.plotly_chart(fig_margin, use_container_width=True)
+
+                # 경쟁사 비교 분석
+                if competitor_analysis:
+                    st.markdown(f'<div class="section-header">경쟁사 분석</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="analysis-card fade-in">{competitor_analysis}</div>', unsafe_allow_html=True)
 
         with tab2:
             if analysis:
