@@ -39,13 +39,26 @@ class _PDF(FPDF):
     def __init__(self, company: str):
         super().__init__()
         self.company = company
+        self._has_bold = False
         base = os.path.join(os.path.dirname(__file__), '..', 'fonts')
-        self.add_font('N', '',  os.path.join(base, 'NanumGothic.ttf'))
+        self.add_font('N', '', os.path.join(base, 'NanumGothic.ttf'))
         bold = os.path.join(base, 'NanumGothicBold.ttf')
-        if os.path.exists(bold):
-            self.add_font('N', 'B', bold)
+        try:
+            if os.path.exists(bold):
+                self.add_font('N', 'B', bold)
+                self._has_bold = True
+        except Exception:
+            self._has_bold = False
         self.set_auto_page_break(True, margin=18)
         self.set_margins(15, 15, 15)
+
+    def nb(self, size: float):
+        """볼드 폰트 (없으면 일반 폰트로 fallback)."""
+        self.set_font('N', 'B' if self._has_bold else '', size=size)
+
+    def nr(self, size: float):
+        """일반 폰트."""
+        self.set_font('N', '', size=size)
 
     def header(self):
         if self.page_no() == 1:
@@ -123,25 +136,25 @@ def _cover(pdf: _PDF, company: str, years: list, financials: dict):
     y = 75
 
     # 타이틀
-    pdf.set_font('N', size=28)
+    pdf.nr(28)
     pdf.set_text_color(*_WH)
     pdf.set_xy(20, y)
     pdf.cell(170, 16, 'SDIC AI', align='C')
     y += 16
 
-    pdf.set_font('N', size=26)
+    pdf.nr(26)
     pdf.set_xy(20, y)
     pdf.cell(170, 15, '기업 재무 분석 리포트', align='C')
     y += 15
 
     # 팀 정보 (흰색)
-    pdf.set_font('N', 'B', size=13)
+    pdf.nb(13)
     pdf.set_text_color(*_WH)
     pdf.set_xy(20, y + 6)
     pdf.cell(170, 9, 'SDIC Team 2', align='C')
     y += 15
 
-    pdf.set_font('N', size=11)
+    pdf.nr(11)
     pdf.set_text_color(*_WH)
     pdf.set_xy(20, y + 2)
     pdf.cell(170, 8, '김경민  ·  주희진  ·  오하영  ·  신지우', align='C')
@@ -154,27 +167,27 @@ def _cover(pdf: _PDF, company: str, years: list, financials: dict):
     y += 14
 
     # 기업명 (흰색에 가깝게)
-    pdf.set_font('N', 'B', size=24)
+    pdf.nb(24)
     pdf.set_text_color(235, 250, 245)
     pdf.set_xy(20, y)
     pdf.cell(170, 14, company, align='C')
     y += 14
 
     # 분석 기간 (흰색에 가깝게)
-    pdf.set_font('N', size=11)
+    pdf.nr(11)
     pdf.set_text_color(220, 242, 235)
     pdf.set_xy(20, y + 2)
     pdf.cell(170, 8, f'분석 기간: {min(years)}년 ~ {max(years)}년  ·  2026년 5월', align='C')
     y += 12
 
     # 출처 + 면책
-    pdf.set_font('N', size=9)
+    pdf.nr(9)
     pdf.set_text_color(200, 230, 220)
     pdf.set_xy(20, y + 4)
     pdf.cell(170, 6, '금융감독원 DART 공시 데이터 기반  ·  dart.fss.or.kr', align='C')
     y += 10
 
-    pdf.set_font('N', size=8.5)
+    pdf.nr(8.5)
     pdf.set_text_color(185, 218, 208)
     pdf.set_xy(20, y + 2)
     pdf.cell(170, 6, '본 보고서는 AI 분석 도구로 생성되었으며 투자 조언을 구성하지 않습니다.', align='C')
@@ -190,7 +203,7 @@ def _toc(pdf: _PDF, has_competitors: bool):
     # 목차 헤더 배너
     pdf.set_fill_color(*_D)
     pdf.rect(0, 14, 210, 28, 'F')
-    pdf.set_font('N', size=14)
+    pdf.nr(14)
     pdf.set_text_color(*_WH)
     pdf.set_xy(15, 22)
     pdf.cell(0, 12, '목  차', align='L')
@@ -217,11 +230,11 @@ def _toc(pdf: _PDF, has_competitors: bool):
         pdf.rect(15, y, 180, 11, 'F')
         pdf.set_fill_color(*_M)
         pdf.rect(15, y, 3, 11, 'F')
-        pdf.set_font('N', 'B', size=11)
+        pdf.nb(11)
         pdf.set_text_color(*_M)
         pdf.set_xy(21, y + 2)
         pdf.cell(16, 7, num)
-        pdf.set_font('N', size=11)
+        pdf.nr(11)
         pdf.set_text_color(*_TX)
         pdf.set_xy(39, y + 2)
         pdf.cell(153, 7, title)
@@ -251,7 +264,7 @@ def _methodology_compact(pdf: _PDF):
     y0, x0 = pdf.get_y(), 15
     pdf.set_fill_color(*_D)
     pdf.set_text_color(*_WH)
-    pdf.set_font('N', size=8)
+    pdf.nr(8)
     for header, w in [('분류', lw), ('내용', rw)]:
         pdf.set_draw_color(*_LG)
         pdf.set_line_width(0.3)
@@ -267,10 +280,10 @@ def _methodology_compact(pdf: _PDF):
         pdf.set_draw_color(*_LG)
         pdf.set_line_width(0.3)
         pdf.set_text_color(*_TX)
-        pdf.set_font('N', 'B', size=8)
+        pdf.nb(8)
         pdf.set_xy(x0, y0)
         pdf.cell(lw, 7, label, border=1, align='C', fill=True)
-        pdf.set_font('N', size=8)
+        pdf.nr(8)
         pdf.set_xy(x0 + lw, y0)
         pdf.cell(rw, 7, desc, border=1, align='L', fill=True)
         pdf.ln(7)
@@ -320,16 +333,16 @@ def _kpi_section(pdf: _PDF, financials: dict):
         pdf.rect(x, y0, bw, 28, 'FD')
         pdf.set_fill_color(*_L)
         pdf.rect(x, y0, bw, 2, 'F')
-        pdf.set_font('N', size=7)
+        pdf.nr(7)
         pdf.set_text_color(*_GR)
         pdf.set_xy(x + 2, y0 + 4)
         pdf.cell(bw - 4, 5, label)
-        pdf.set_font('N', size=10)
+        pdf.nr(10)
         pdf.set_text_color(*_D)
         pdf.set_xy(x + 2, y0 + 11)
         pdf.cell(bw - 4, 7, value)
         if d:
-            pdf.set_font('N', size=7)
+            pdf.nr(7)
             if d.startswith('+'):
                 pdf.set_text_color(40, 130, 80)
             else:
@@ -357,7 +370,7 @@ def _financial_table(pdf: _PDF, financials: dict):
         pdf.set_fill_color(*fill)
         for val, w in zip(cells, col_w):
             pdf.set_text_color(*tc)
-            pdf.set_font('N', size=8)
+            pdf.nr(8)
             pdf.set_draw_color(*_LG)
             pdf.set_line_width(0.3)
             pdf.set_xy(x0, y0)
@@ -380,7 +393,7 @@ def _financial_table(pdf: _PDF, financials: dict):
         )
 
     # 데이터 출처 주석
-    pdf.set_font('N', size=7)
+    pdf.nr(7)
     pdf.set_text_color(*_GR)
     pdf.cell(0, 5, '※ 출처: 금융감독원 전자공시시스템 (DART)  ·  연결 재무제표 기준',
              new_x=XPos.LMARGIN, new_y=YPos.NEXT)
@@ -395,7 +408,7 @@ def _yoy_table(pdf: _PDF, financials: dict):
 
     sorted_f = sorted(financials.items())
     if len(sorted_f) < 2:
-        pdf.set_font('N', size=9)
+        pdf.nr(9)
         pdf.cell(0, 7, '비교 데이터 부족', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         return
 
@@ -405,7 +418,7 @@ def _yoy_table(pdf: _PDF, financials: dict):
     def _hdr():
         y0, x0 = pdf.get_y(), 15
         pdf.set_fill_color(*_D)
-        pdf.set_font('N', size=8)
+        pdf.nr(8)
         for h, w in zip(headers, col_w):
             pdf.set_text_color(*_WH)
             pdf.set_xy(x0, y0)
@@ -465,7 +478,7 @@ def _yoy_table(pdf: _PDF, financials: dict):
             else:
                 tc = _TX
             pdf.set_text_color(*tc)
-            pdf.set_font('N', size=8)
+            pdf.nr(8)
             pdf.set_draw_color(*_LG)
             pdf.set_line_width(0.3)
             pdf.set_xy(x0, y0)
@@ -509,7 +522,7 @@ def _competitor_section(pdf: _PDF, company: str, financials: dict,
         pdf.set_fill_color(*_D)
         for h, w in zip(headers, col_w):
             pdf.set_text_color(*_WH)
-            pdf.set_font('N', size=7.5)
+            pdf.nr(7.5)
             pdf.set_draw_color(*_LG)
             pdf.set_line_width(0.3)
             pdf.set_xy(x0, y0)
@@ -535,7 +548,7 @@ def _competitor_section(pdf: _PDF, company: str, financials: dict,
             pdf.set_fill_color(*(_RA if idx % 2 else _WH))
             for val, w in zip(row, col_w):
                 pdf.set_text_color(*(_D if is_main else _TX))
-                pdf.set_font('N', size=7.5)
+                pdf.nr(7.5)
                 pdf.set_draw_color(*_LG)
                 pdf.set_line_width(0.5 if is_main else 0.3)
                 pdf.set_xy(x0, y0)
@@ -543,7 +556,7 @@ def _competitor_section(pdf: _PDF, company: str, financials: dict,
                 x0 += w
             pdf.ln(7)
 
-        pdf.set_font('N', size=7)
+        pdf.nr(7)
         pdf.set_text_color(*_GR)
         pdf.cell(0, 5, '※ 각 기업의 가장 최근 공시 연도 기준  ·  DART 연결 재무제표',
                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
@@ -565,10 +578,10 @@ def _competitor_section(pdf: _PDF, company: str, financials: dict,
                 if not tok:
                     continue
                 if token_pat.fullmatch(tok):
-                    pdf.set_font('N', 'B', size=10.5)
+                    pdf.nb(10.5)
                     pdf.set_text_color(*_D)
                 else:
-                    pdf.set_font('N', size=10.5)
+                    pdf.nr(10.5)
                     pdf.set_text_color(*_TX)
                 pdf.write(6.5, tok)
             pdf.ln(6.5)
@@ -669,7 +682,7 @@ def _charts_section(pdf: _PDF, financials: dict, company: str):
         os.unlink(c2)
 
     if not c1 and not c2:
-        pdf.set_font('N', size=9)
+        pdf.nr(9)
         pdf.set_text_color(*_GR)
         pdf.cell(0, 7, '(matplotlib 미설치 — 차트 생략)',
                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
@@ -719,7 +732,7 @@ def _render_analysis_block(pdf: _PDF, sec_title: str, text: str, subtitle: str =
         pdf.rect(15, y, 180, box_h, 'D')
         pdf.set_fill_color(*_M)
         pdf.rect(15, y, 4, box_h, 'F')
-        pdf.set_font('N', 'B', size=11)
+        pdf.nb(11)
         pdf.set_text_color(*_D)
         pdf.set_xy(22, y + (box_h - lines_needed * 8) / 2 + 1)
         pdf.multi_cell(170, 8, subtitle, align='L')
@@ -736,7 +749,7 @@ def _render_analysis_block(pdf: _PDF, sec_title: str, text: str, subtitle: str =
 
     sections = _parse_numbered(clean_text)
     if not sections:
-        pdf.set_font('N', size=9.5)
+        pdf.nr(9.5)
         pdf.set_text_color(*_TX)
         pdf.set_xy(15, pdf.get_y())
         pdf.multi_cell(180, 6, clean_text.strip(), align='L')
@@ -744,7 +757,7 @@ def _render_analysis_block(pdf: _PDF, sec_title: str, text: str, subtitle: str =
 
     def _est_h(body_text: str, body_w: float = 172, line_h: float = 6) -> float:
         """한국어 문자 단위 줄 수 계산."""
-        pdf.set_font('N', size=9)
+        pdf.nr(9)
         h = 0.0
         for para in (body_text.strip().split('\n') if body_text else []):
             if not para.strip():
@@ -776,18 +789,18 @@ def _render_analysis_block(pdf: _PDF, sec_title: str, text: str, subtitle: str =
         pdf.rect(15, y_start, 180, 11, 'F')
         pdf.set_fill_color(*_M)
         pdf.rect(15, y_start, 11, 11, 'F')
-        pdf.set_font('N', 'B', size=8.5)
+        pdf.nb(8.5)
         pdf.set_text_color(*_WH)
         pdf.set_xy(15, y_start + 2)
         pdf.cell(11, 7, str(i + 1), align='C')
-        pdf.set_font('N', 'B', size=9)
+        pdf.nb(9)
         pdf.set_text_color(*_D)
         pdf.set_xy(29, y_start + 2)
         pdf.cell(163, 7, header, align='L')
 
         # ② 본문 — auto_page_break ON 유지 (내용이 길어도 잘리지 않음)
         if body:
-            pdf.set_font('N', size=9)
+            pdf.nr(9)
             pdf.set_text_color(*_TX)
             pdf.set_xy(19, y_start + 13)
             pdf.multi_cell(172, 6, body.strip(), align='L')
@@ -833,7 +846,7 @@ def _analysis_section(pdf: _PDF, analysis: str):
     pdf.sec('IV.  Claude AI 재무 분석')
 
     if not analysis:
-        pdf.set_font('N', size=9)
+        pdf.nr(9)
         pdf.cell(0, 7, '분석 결과 없음', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         return
 
@@ -858,17 +871,17 @@ def _analysis_section(pdf: _PDF, analysis: str):
                 continue
             is_num = bool(token_pat.fullmatch(tok))
             if is_num:
-                pdf.set_font('N', 'B', size=10)
+                pdf.nb(10)
                 pdf.set_text_color(*_D)
             else:
-                pdf.set_font('N', size=10)
+                pdf.nr(10)
                 pdf.set_text_color(*_TX)
             # multi_cell로 줄바꿈 처리 (마지막 토큰이면 줄바꿈)
             pdf.write(6, tok)
         pdf.ln(6)
 
     pdf.ln(4)
-    pdf.set_font('N', size=7)
+    pdf.nr(7)
     pdf.set_text_color(*_GR)
     pdf.multi_cell(
         0, 5,
