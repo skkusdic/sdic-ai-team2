@@ -376,6 +376,9 @@ if analyze_btn or default_company:
                 "next_agent": "",
                 "financials": {},
                 "analysis": "",
+                "industry": "",
+                "industry_trend": "",
+                "industry_specific": "",
                 "competitors": {},
                 "competitor_analysis": "",
                 "result": "",
@@ -446,7 +449,7 @@ if "final_state" in st.session_state:
                 return f'{val/10000:.1f} 조원'
             return f'{val:,} 억원'
 
-        tab1, tab2, tab3 = st.tabs(["재무 데이터", "Claude 분석", "AI와 대화하기"])
+        tab1, tab2, tab3, tab4 = st.tabs(["재무 데이터", "산업 분석", "Claude 분석", "AI와 대화하기"])
 
         with tab1:
             # KPI 카드 4장
@@ -600,12 +603,30 @@ if "final_state" in st.session_state:
                     st.markdown(f'<div class="analysis-card fade-in">{competitor_analysis}</div>', unsafe_allow_html=True)
 
         with tab2:
+            industry = final_state.get("industry", "")
+            industry_trend = final_state.get("industry_trend", "")
+            industry_specific = final_state.get("industry_specific", "")
+
+            if industry:
+                st.markdown(f'<div class="section-header">{industry}</div>', unsafe_allow_html=True)
+
+                if industry_trend:
+                    st.markdown(f'<div class="section-header">산업 동향</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="analysis-card fade-in">{industry_trend}</div>', unsafe_allow_html=True)
+
+                if industry_specific:
+                    st.markdown(f'<div class="section-header">맞춤 분석</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="analysis-card fade-in">{industry_specific}</div>', unsafe_allow_html=True)
+            else:
+                st.info("산업 분석 결과가 없습니다.")
+
+        with tab3:
             if analysis:
                 st.markdown(f'<div class="analysis-card fade-in">{analysis}</div>', unsafe_allow_html=True)
             else:
                 st.info("분석 결과가 없습니다.")
 
-        with tab3:
+        with tab4:
             st.markdown('<div class="section-header">AI 질문</div>', unsafe_allow_html=True)
 
             TEXT2SQL_KEYWORDS = {"평균", "합계", "최대", "최소", "몇", "총", "얼마", "비교", "순위", "합산"}
