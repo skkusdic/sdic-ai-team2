@@ -3,6 +3,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from claude_client import ask
+from data import get_industry_news
 
 
 def _get_industry(company: str) -> str:
@@ -13,9 +14,17 @@ def _get_industry(company: str) -> str:
     return ask(prompt, max_tokens=80).strip()
 
 
-def _trend_analysis(company: str, industry: str) -> str:
+def _trend_analysis(company: str, industry: str, news_items: list = None) -> str:
+    news_context = ""
+    if news_items:
+        news_context = "최신 뉴스 요약:\n"
+        for i, item in enumerate(news_items[:5], 1):
+            news_context += f"{i}. {item['title']}\n"
+        news_context += "\n"
+
     prompt = (
         f"'{company}'이 속한 '{industry}' 산업 동향을 아래 4개 항목으로 작성해줘.\n"
+        f"{news_context}"
         "규칙: 각 항목은 줄글 2문장만. 부제목·목록·구분선 없음. 반드시 마침표로 끝낼 것.\n\n"
         "1. 시장 규모 및 성장률 추세\n"
         "2. 핵심 기술 변화 및 혁신 방향\n"
@@ -66,7 +75,12 @@ def industry_agent(state: dict) -> dict:
     industry = _get_industry(company)
     print(f"[Industry Agent] 산업 분류: {industry}")
 
-    trend    = _trend_analysis(company, industry)
+    # 뉴스 데이터 수집
+    news_items = get_industry_news(company)
+    if news_items:
+        print(f"[Industry Agent] 뉴스 {len(news_items)}개 수집 완료")
+
+    trend    = _trend_analysis(company, industry, news_items)
     specific = _specific_analysis(company, industry, financials)
 
     print("[Industry Agent] 완료")
