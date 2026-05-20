@@ -381,6 +381,9 @@ if analyze_btn or default_company:
                 "industry_specific": "",
                 "competitors": {},
                 "competitor_analysis": "",
+                "industry": "",
+                "industry_trend": "",
+                "industry_specific": "",
                 "result": "",
                 "pdf_path": "",
             })
@@ -571,7 +574,7 @@ if "final_state" in st.session_state:
                                    tickformat=",", title="매출액 (억원)"),
                         height=300,
                     )
-                    fig_revenue.update_xaxes(categorywidth=0.6)
+                    fig_revenue.update_traces(width=0.4)
                     st.plotly_chart(fig_revenue, use_container_width=True)
 
                 with col2:
@@ -594,13 +597,17 @@ if "final_state" in st.session_state:
                                    title="영업이익률 (%)"),
                         height=300,
                     )
-                    fig_margin.update_xaxes(categorywidth=0.6)
+                    fig_margin.update_traces(width=0.4)
                     st.plotly_chart(fig_margin, use_container_width=True)
 
                 # 경쟁사 비교 분석
                 if competitor_analysis:
                     st.markdown(f'<div class="section-header">경쟁사 분석</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="analysis-card fade-in">{competitor_analysis}</div>', unsafe_allow_html=True)
+                    comp_clean = re.sub(r'#+\s*', '', competitor_analysis)
+                    comp_clean = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', comp_clean)
+                    comp_clean = re.sub(r'\n\n+', '<br><br>', comp_clean)
+                    comp_clean = re.sub(r'\n-\s*', '<br>• ', comp_clean)
+                    st.markdown(f'<div class="analysis-card fade-in">{comp_clean}</div>', unsafe_allow_html=True)
 
         with tab2:
             industry = final_state.get("industry", "")
@@ -612,17 +619,29 @@ if "final_state" in st.session_state:
 
                 if industry_trend:
                     st.markdown(f'<div class="section-header">산업 동향</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="analysis-card fade-in">{industry_trend}</div>', unsafe_allow_html=True)
+                    trend_clean = re.sub(r'#+\s*', '', industry_trend)
+                    trend_clean = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', trend_clean)
+                    trend_clean = re.sub(r'\n\n+', '<br><br>', trend_clean)
+                    trend_clean = re.sub(r'\n-\s*', '<br>• ', trend_clean)
+                    st.markdown(f'<div class="analysis-card fade-in">{trend_clean}</div>', unsafe_allow_html=True)
 
                 if industry_specific:
                     st.markdown(f'<div class="section-header">맞춤 분석</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="analysis-card fade-in">{industry_specific}</div>', unsafe_allow_html=True)
+                    spec_clean = re.sub(r'#+\s*', '', industry_specific)
+                    spec_clean = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', spec_clean)
+                    spec_clean = re.sub(r'\n\n+', '<br><br>', spec_clean)
+                    spec_clean = re.sub(r'\n-\s*', '<br>• ', spec_clean)
+                    st.markdown(f'<div class="analysis-card fade-in">{spec_clean}</div>', unsafe_allow_html=True)
             else:
                 st.info("산업 분석 결과가 없습니다.")
 
         with tab3:
             if analysis:
-                st.markdown(f'<div class="analysis-card fade-in">{analysis}</div>', unsafe_allow_html=True)
+                anal_clean = re.sub(r'#+\s*', '', analysis)
+                anal_clean = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', anal_clean)
+                anal_clean = re.sub(r'\n\n+', '<br><br>', anal_clean)
+                anal_clean = re.sub(r'\n-\s*', '<br>• ', anal_clean)
+                st.markdown(f'<div class="analysis-card fade-in">{anal_clean}</div>', unsafe_allow_html=True)
             else:
                 st.info("분석 결과가 없습니다.")
 
