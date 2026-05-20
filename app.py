@@ -568,6 +568,7 @@ if "final_state" in st.session_state:
                                    tickformat=",", title="매출액 (억원)"),
                         height=300,
                     )
+                    fig_revenue.update_xaxes(categorywidth=0.6)
                     st.plotly_chart(fig_revenue, use_container_width=True)
 
                 with col2:
@@ -590,6 +591,7 @@ if "final_state" in st.session_state:
                                    title="영업이익률 (%)"),
                         height=300,
                     )
+                    fig_margin.update_xaxes(categorywidth=0.6)
                     st.plotly_chart(fig_margin, use_container_width=True)
 
                 # 경쟁사 비교 분석
